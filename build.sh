@@ -1,9 +1,9 @@
 #!/bin/sh
-# Regenerates the passphrase-gated playtest build (./index.html) from ./src.
+# Regenerates the passphrase-gated playtest build (./docs/index.html) from ./src.
 #
 #   M3_PASSPHRASE=<passphrase> sh build.sh
 #
-# index.html is a GENERATED file — never hand-edit it. All changes go in src/,
+# docs/index.html is a GENERATED file — never hand-edit it. All changes go in src/,
 # then rerun this script and commit both together.
 #
 # The passphrase is deliberately NOT stored in this public repo; ask Omri for it.
@@ -15,6 +15,7 @@ ITER=200000
 TITLE='Match-3 Roguelite — Ascent'
 GATE_HEADING='🏔️ Match-3 Roguelite — Ascent'
 
+mkdir -p docs
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -96,6 +97,6 @@ try{
 }catch(e){}
 </script></body></html>
 LOADER
-} > index.html
+} > docs/index.html
 
-echo "regenerated index.html from src/ — commit it together with your src changes"
+echo "regenerated docs/index.html from src/ — commit it together with your src changes"

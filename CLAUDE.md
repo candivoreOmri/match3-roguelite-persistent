@@ -25,13 +25,13 @@ Set `RL.game.fast = true` to skip animation delays in scripted tests;
 
 ## The generated playtest build
 
-`./index.html` (repo root) is **generated** by `build.sh` — a single-file bundle of
+`docs/index.html` is **generated** by `build.sh` — a single-file bundle of
 `src/`, AES-encrypted behind the playtest passphrase, served by GitHub Pages.
 
-- **Never hand-edit `index.html`.** Edit `src/`, then regenerate:
+- **Never hand-edit `docs/index.html`.** Edit `src/`, then regenerate:
   `M3_PASSPHRASE=<passphrase> sh build.sh` (passphrase not in the repo — ask Omri).
-- Commit the regenerated `index.html` in the same PR as the `src/` change, or leave
-  it untouched and let whoever merges regenerate — but `main`'s `index.html` must
+- Commit the regenerated `docs/index.html` in the same PR as the `src/` change, or leave
+  it untouched and let whoever merges regenerate — but `main`'s `docs/index.html` must
   always match `main`'s `src/`.
 
 ## Workflow
