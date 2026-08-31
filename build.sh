@@ -26,9 +26,37 @@ trap 'rm -rf "$TMP"' EXIT
   echo '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">'
   echo '<style>'
   cat "$SRC/styles.css"
+  echo '</style>'
+  # fonts: the bundle is a single file, so the dev-relative url(fonts/…) rules
+  # in styles.css can't resolve — append data-URI @font-face rules that win the
+  # cascade (same family+weight declared later overrides the dev rule).
+  echo '<style>'
+  for spec in "Fruktur:Fruktur-Regular.ttf" "Alegreya Sans:AlegreyaSans-ExtraBold.ttf"; do
+    fam="${spec%%:*}"; file="${spec#*:}"
+    printf "@font-face{font-family:'%s';src:url(data:font/ttf;base64," "$fam"
+    openssl base64 -A -in "$SRC/fonts/$file"
+    printf ") format('truetype');font-weight:100 900;}\n"
+  done
   echo '</style></head><body>'
   echo '<div id="root"></div>'
-  for f in "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
+  # skin assets: the single-file bundle can't fetch skin.json or the PNGs, so
+  # inline the whole manifest as data URIs — skin.js reads window.__SKIN_INLINE__
+  # before falling back to the XHR. Must come BEFORE skin.js in the bundle.
+  echo '<script>'
+  python3 - "$SRC/assets" <<'PY'
+import base64, json, mimetypes, os, sys
+A = sys.argv[1]
+slots = json.load(open(os.path.join(A, 'skin.json')))['slots']
+out = {}
+for slot, rel in slots.items():
+    p = os.path.join(A, rel)
+    if os.path.exists(p):
+        mime = mimetypes.guess_type(p)[0] or 'image/png'
+        out[slot] = 'data:%s;base64,%s' % (mime, base64.b64encode(open(p, 'rb').read()).decode())
+print('window.__SKIN_INLINE__=' + json.dumps({'slots': out}) + ';')
+PY
+  echo '</script>'
+  for f in "$SRC/skin.js" "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
     echo '<script>'
     cat "$f"
     echo '</script>'
