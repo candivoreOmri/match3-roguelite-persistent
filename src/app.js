@@ -17,7 +17,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 10, // v10: runs END at the final flag (leftover moves → dice), per-world checkpoint scale
+  BALANCE_VERSION: 11, // v11: world-1 shortened+tightened (per-world moves), boss via button, uncapped dice, buyable dice
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -49,15 +49,24 @@ const CONFIG = {
   // checkpoint 3. World 2 ≈ 0.85× the full tuning (batches 1+2 hold most of
   // the score engines); world 3 is the original v3 full-roster curve.
   WORLD_CHECKPOINTS: [
-    [45, 120, 235, 400, 620, 900],
+    [35, 85, 165, 280, 435, 635],
     [68, 213, 442, 765, 1275, 2125],
     [80, 250, 520, 900, 1500, 2500],
   ],
-  START_MOVES: 10,                 // opening move pool
-  // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
-  // each segment's grant now sits ~2 under its observed median moves-used,
-  // so banked surplus + refunds/momentum have to cover the difference.
-  CHECKPOINT_MOVES: [8, 10, 11, 12, 13, 6], // granted on crossing checkpoint i (last entry unused since v10 — the final flag ends the run)
+  // v11: moves are per-world too — world 1 was "too easy and too long"
+  // (Omri), so it now runs ~half as long (9 start + 6-8 grants ≈ 42-move
+  // budget) with a curve that's gentle while you have no engine (seg1 needs
+  // ~4 pts/move) and steep once you should (seg6 ~25) — bot retune: 25%
+  // win rate at 33-42 moves/run, 2-10 leftover moves on wins, losses spread
+  // over checkpoints 1-5 instead of clustering early. Worlds 2/3 keep the
+  // v6 full-roster tuning. Last grant slot is unused since v10 (the final
+  // flag ends the run).
+  WORLD_START_MOVES: [9, 10, 10],  // opening move pool per world
+  WORLD_CHECKPOINT_MOVES: [
+    [6, 6, 7, 7, 8],
+    [8, 10, 11, 12, 13],
+    [8, 10, 11, 12, 13],
+  ],
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -151,11 +160,14 @@ const CONFIG = {
   DICE_ON_PARTIAL_CLEAR: 1,        // reached PARTIAL_CLEAR_CHECKPOINT but lost
   PARTIAL_CLEAR_CHECKPOINT: 3,     // "partial clear" = crossed at least this checkpoint
   DICE_ON_LOSS: 0,
-  DICE_CAP: 10,                    // dice carry over between runs, up to this
+  // v11: the cap is NOT enforced on earnings any more — earned/bought dice
+  // stack freely. Kept as the threshold for a future refill mechanic.
+  DICE_CAP: 10,
+  DICE_PRICE_COINS: 50,            // buy one die for coins on the board hub
   DIE_SIDES: 6,
   BOARD_SPACES: 20,                // one lap = one full loop of the board
   STARTING_DICE: 3,                // dice a brand-new save begins with
-  LAPS_TO_UNLOCK_BOSS: [5, 7, 10], // laps in-world before the boss space appears, per world
+  LAPS_TO_UNLOCK_BOSS: [2, 7, 10], // laps in-world before the boss run unlocks, per world
   CURRENT_WORLD: 1,                // world a fresh save starts on
   BOARD_COIN_REWARD_MIN: 10,       // coin space payout range
   BOARD_COIN_REWARD_MAX: 20,
@@ -416,37 +428,35 @@ const SPACE_TYPES = {
 /* ----- Worlds — layout is 20 space-type ids, clockwise from Home at 0.
    Composition (world 1 spec): coin×4, consumable×2, modifier×3, mystery×2,
    mini-game×2, meta offer×1, landmark×1, empty×3 = 18 — padded with +1 coin
-   and +1 empty to fill the 20 spaces. bossSpace = index the boss occupies
-   once unlocked (suppresses the space under it until the boss is beaten). */
+   and +1 empty to fill the 20 spaces. Empty spaces are dead beats: landing
+   on one does nothing (v11 — flavour text cut). The boss is NOT a space:
+   once unlocked it takes over the Start-run button (v11). */
 const WORLD_LAYOUT = [
   'landmark',          //  0 — Home
   'coin', 'empty', 'modifier', 'mystery',                    //  1-4
   'coin', 'consumable', 'minigame_flip', 'modifier', 'coin', //  5-9
-  'empty',                                                   // 10 — boss space once unlocked
+  'empty',                                                   // 10
   'minigame_scratch', 'consumable', 'coin', 'mystery',       // 11-14
   'modifier', 'empty', 'metaoffer', 'coin', 'empty',         // 15-19
 ];
 const WORLDS = [
   { id: 1, name: 'Meadow Hollow', icon: '🌿',
-    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[0], bossSpace: 10,
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[0],
     boss: { name: 'Prism Guardian', icon: '🌈', modifiers: ['boss6'] },
     modifierPool: ['cpmoves', 'first2x', 'startspecial'],
     metaOffers: ['jackpot'],
-    flavour: ['A warm breeze rolls over the clover.', 'Somewhere, a piñata rustles.', 'The trail is quiet. Too quiet.'],
     spaces: WORLD_LAYOUT },
   { id: 2, name: 'Ember Dunes', icon: '🏜️',
-    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[1], bossSpace: 10,
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[1],
     boss: { name: 'Dune Colossus', icon: '🗿', modifiers: ['bosscold'] },
     modifierPool: ['cpmoves', 'first2x', 'startspecial'],
     metaOffers: ['jackpot'],
-    flavour: ['Sand in your shoes. Again.', 'A mirage shimmers — was that a chest?', 'The dunes hum with old heat.'],
     spaces: WORLD_LAYOUT },
   { id: 3, name: 'Frost Summit', icon: '🏔️',
-    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[2], bossSpace: 10,
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[2],
     boss: { name: 'Summit Wyrm', icon: '🐉', modifiers: ['boss6', 'bosscold'] },
     modifierPool: ['cpmoves', 'first2x', 'startspecial'],
     metaOffers: ['jackpot'],
-    flavour: ['Your breath hangs in the air.', 'The summit watches.', 'Ice creaks under the token.'],
     spaces: WORLD_LAYOUT },
 ];
 
@@ -477,7 +487,7 @@ const META = {
     const defaults = {
       v: 1,
       world: CONFIG.CURRENT_WORLD,   // 1-based; drives batch unlocks + board theme
-      dice: CONFIG.STARTING_DICE,    // carried between runs, capped at DICE_CAP
+      dice: CONFIG.STARTING_DICE,    // carried between runs, uncapped (v11)
       coins: 0,
       pos: 0,                        // token position on the 20-space loop
       laps: 0,                       // lifetime laps (display)
@@ -500,12 +510,20 @@ const META = {
     return this.state.worldLaps >= this.world().lapsForBoss && !this.state.bossDefeated.includes(this.state.world);
   },
   campaignDone() { return this.state.bossDefeated.includes(WORLDS.length); },
-  // returns dice actually banked after the cap clips the gain
+  // v11: gains are UNCAPPED (DICE_CAP is reserved for a future refill
+  // mechanic) — only the floor at 0 is enforced. Returns the actual delta.
   addDice(n) {
     const before = this.state.dice;
-    this.state.dice = Math.max(0, Math.min(CONFIG.DICE_CAP, before + n));
+    this.state.dice = Math.max(0, before + n);
     this.save();
     return this.state.dice - before;
+  },
+  buyDie() {
+    if (this.state.coins < CONFIG.DICE_PRICE_COINS) return false;
+    this.state.coins -= CONFIG.DICE_PRICE_COINS;
+    this.state.dice += 1;
+    this.save();
+    return true;
   },
   addCoins(n) { this.state.coins += n; this.save(); },
   addConsumable(id) { this.state.consumables[id] = (this.state.consumables[id] || 0) + 1; this.save(); },
@@ -728,7 +746,8 @@ class PersistentGame extends Game {
     this.rows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     this.cols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
     // board modifiers adjust the opening pool (landmark laps +, boss cold start −)
-    this.movesLeft = Math.max(1, CONFIG.START_MOVES + this.runModStartMoves());
+    const startMoves = CONFIG.WORLD_START_MOVES[Math.min(META.state.world, CONFIG.WORLD_START_MOVES.length) - 1];
+    this.movesLeft = Math.max(1, startMoves + this.runModStartMoves());
     this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0;
     this.lastWarnedMoves = null;
     this.score = 0;
@@ -804,7 +823,8 @@ class PersistentGame extends Game {
         this.finishRunMeta(true); // dice payout (1/leftover move), boss settle, modifier expiry
         return;
       }
-      const grant = CONFIG.CHECKPOINT_MOVES[Math.min(i, CONFIG.CHECKPOINT_MOVES.length - 1)]
+      const grants = CONFIG.WORLD_CHECKPOINT_MOVES[Math.min(META.state.world, CONFIG.WORLD_CHECKPOINT_MOVES.length) - 1];
+      const grant = grants[Math.min(i, grants.length - 1)]
                   + this.runModCpBonus(); // board modifier: +1 per Trail rations
       const before = this.movesLeft;
       this.movesLeft += grant;
@@ -1202,24 +1222,6 @@ function MysteryBox({ reward, onDone }) {
   </div>`;
 }
 
-/* ----- Meta power-up offer — meta reward instead of in-run power; declinable */
-function MetaOfferPanel({ offerId, onDone }) {
-  const offer = META_POWERUPS[offerId];
-  const [taken, setTaken] = React.useState(false);
-  const take = () => { if (taken) return; offer.apply(); setTaken(true); };
-  return h`<div className="minigame-body">
-    <div className="mg-bigicon">${offer.icon}</div>
-    <div className="mg-title">${offer.name}</div>
-    <p className="mg-desc">${offer.desc}</p>
-    ${taken
-      ? h`<div className="mg-result"><b className="gold">Taken!</b></div><button className="primary" onClick=${onDone}>Done</button>`
-      : h`<div className="mg-buttons">
-          <button className="primary" onClick=${take}>Take it</button>
-          <button onClick=${onDone}>Decline</button>
-        </div>`}
-  </div>`;
-}
-
 /* ----- The landing popup — one overlay, body switches on space type */
 function SpaceRevealPopup({ ui, world, onClose }) {
   const t = SPACE_TYPES[ui.type] || SPACE_TYPES.empty;
@@ -1234,9 +1236,12 @@ function SpaceRevealPopup({ ui, world, onClose }) {
       case 'mystery': return h`<${MysteryBox} reward=${ui.reward} onDone=${onClose} />`;
       case 'minigame_flip': return h`<${CoinFlipGame} onDone=${onClose} />`;
       case 'minigame_scratch': return h`<${ScratchGame} onDone=${onClose} />`;
-      case 'metaoffer': return h`<${MetaOfferPanel} offerId=${ui.offer} onDone=${onClose} />`;
+      case 'metaoffer': { // v11: auto-applied on landing — a net positive needs no decline
+        const offer = META_POWERUPS[ui.offer];
+        return h`<div className="mg-bigicon">${offer.icon}</div><div className="mg-title">${offer.name}</div><div className="mg-result gold">${offer.desc}</div><button className="primary" onClick=${onClose}>Collect</button>`;
+      }
       case 'landmark': return h`<div className="mg-bigicon">🏠</div><div className="mg-result">Welcome home — lap complete!</div><p className="mg-desc">+${CONFIG.LANDMARK_MOVE_BONUS} starting move banked for your next run.</p><button className="primary" onClick=${onClose}>Onward</button>`;
-      default: return h`<div className="mg-bigicon dim">${world.icon}</div><p className="mg-desc flavour">${ui.text}</p><button className="primary" onClick=${onClose}>OK</button>`;
+      default: return h`<button className="primary" onClick=${onClose}>OK</button>`;
     }
   })();
   return h`<div className="overlay"><div className=${'panel spacepanel sp-' + t.cls}>
@@ -1268,19 +1273,13 @@ function BossOfferPanel({ world, onFight, onFlee }) {
 /* ----- The loop itself: 20 spaces + token, positioned around a circle */
 function BoardLoop({ pos, hopKey, moving }) {
   const world = META.world();
-  const bossOn = META.bossUnlocked();
-  const beaten = META.state.bossDefeated.includes(META.state.world);
   const spaces = world.spaces.map((type, i) => {
-    const isBoss = bossOn && i === world.bossSpace;
-    const t = isBoss ? SPACE_TYPES.boss : SPACE_TYPES[type];
+    const t = SPACE_TYPES[type];
     const { x, y } = spaceXY(i);
-    const icon = isBoss ? world.boss.icon
-      : type === 'empty' ? world.icon
-      : t.icon;
     return h`<div key=${i} style=${{ left: x + '%', top: y + '%' }}
-      className=${'bspace ' + t.cls + (isBoss ? ' boss' : '') + (i === pos ? ' here' : '') + (beaten && i === world.bossSpace ? ' beaten' : '')}
-      title=${isBoss ? `${world.boss.name} — land here to fight!` : t.label}>
-      <div className="bspace-in">${icon}${beaten && i === world.bossSpace ? h`<span className="beatmark">✓</span>` : null}</div>
+      className=${'bspace ' + t.cls + (i === pos ? ' here' : '')}
+      title=${t.label}>
+      <div className="bspace-in">${type === 'empty' ? world.icon : t.icon}</div>
     </div>`;
   });
   const { x, y } = spaceXY(pos);
@@ -1358,10 +1357,9 @@ function BoardScreen({ G }) {
   };
 
   // Land on a space: instant rewards are applied HERE, exactly once — the
-  // popup only displays them. Interactive spaces (mystery, mini-games, the
-  // meta offer) apply inside their component when the player acts.
+  // popup only displays them. Interactive spaces (mystery, mini-games)
+  // apply inside their component when the player acts.
   const landOn = idx => {
-    if (META.bossUnlocked() && idx === world.bossSpace) { setUi({ mode: 'bossoffer' }); return; }
     const type = world.spaces[idx];
     switch (type) {
       case 'coin': {
@@ -1384,11 +1382,16 @@ function BoardScreen({ G }) {
         break;
       }
       case 'mystery': setUi({ mode: 'reveal', type, reward: rollMystery() }); break;
-      case 'metaoffer': setUi({ mode: 'reveal', type, offer: world.metaOffers[Math.floor(Math.random() * world.metaOffers.length)] }); break;
+      case 'metaoffer': { // v11: net positive — applied on the spot, no accept/decline
+        const offer = world.metaOffers[Math.floor(Math.random() * world.metaOffers.length)];
+        META_POWERUPS[offer].apply();
+        setUi({ mode: 'reveal', type, offer });
+        break;
+      }
       case 'minigame_flip':
       case 'minigame_scratch':
       case 'landmark': setUi({ mode: 'reveal', type }); break;
-      default: setUi({ mode: 'reveal', type: 'empty', text: world.flavour[Math.floor(Math.random() * world.flavour.length)] });
+      default: setUi({ mode: 'idle' }); // empty space — dead beat, nothing happens (v11: flavour cut)
     }
   };
 
@@ -1402,24 +1405,29 @@ function BoardScreen({ G }) {
     </div>
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <${RunModChips} mods=${S.modifiers} label="Next run:" />
-    ${bossReady ? h`<div className="bosshint">👹 ${world.boss.name} awaits — land on the boss space to fight!</div>` : null}
     <div className="bboard">
       <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} />
       <div className="bhub">
-        <div className="bdice-count">🎲 <b>${S.dice}</b><span className="bdice-cap">/${CONFIG.DICE_CAP}</span></div>
+        <div className="bdice-count">🎲 <b>${S.dice}</b></div>
         <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '')}>${face}</div>
         <button className="primary broll" disabled=${busy || S.dice <= 0} onClick=${roll}>
           ${S.dice > 0 ? 'Roll 🎲' : 'No dice'}
         </button>
+        <button className="bbuy" disabled=${busy || S.coins < CONFIG.DICE_PRICE_COINS}
+          onClick=${() => { if (META.buyDie()) { note('🎲 +1 die!'); G.render(); } }}>
+          +1 🎲 for ${CONFIG.DICE_PRICE_COINS} 🪙
+        </button>
         <div className="blaps">🏁 Lap ${S.laps}</div>
         <div className=${'bboss-progress' + (bossReady ? ' ready' : '')}>
-          👹 ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'UNLOCKED' : `${S.worldLaps}/${world.lapsForBoss} laps`}
+          👹 ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'READY' : `${S.worldLaps}/${world.lapsForBoss} laps`}
         </div>
       </div>
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
     </div>
-    ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN}+, or cross checkpoint ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
-    <button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>▶ Start run</button>
+    ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross checkpoint ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
+    ${bossReady
+      ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>⚔️ Fight ${world.boss.name}</button>`
+      : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>▶ Start run</button>`}
     <details className="tester-tools">
       <summary>🧪 Tester tools</summary>
       <div className="menu-box">
@@ -1740,7 +1748,7 @@ function EndScreen({ G }) {
       ${win ? h`<div className="end-spare">👟 <b>${Math.max(0, G.movesLeft)}</b> ${G.movesLeft === 1 ? 'move' : 'moves'} to spare</div>` : null}
       <div className=${'end-dice' + (rw && rw.dice > 0 ? ' won' : '')}>
         ${rw && rw.dice > 0 ? h`🎲 <b>+${rw.dice}</b> ${rw.dice === 1 ? 'die' : 'dice'} earned` : '🎲 no dice this time'}
-        <span className="end-dice-total"> — ${META.state.dice}/${CONFIG.DICE_CAP} banked</span>
+        <span className="end-dice-total"> — ${META.state.dice} banked</span>
       </div>
       <div className="seedline">seed ${G.seed}</div>
     </div>
@@ -1780,7 +1788,7 @@ function App() {
         setMoves(n) { G.movesLeft = n; G.render(); },
         pick(id, color) { G.run.picks.push(color !== undefined ? { id, color } : { id }); G.computeMods(); G.render(); },
         // --- board meta cheats ---
-        dice(n) { META.state.dice = Math.max(0, Math.min(CONFIG.DICE_CAP, n)); META.save(); G.render(); },
+        dice(n) { META.state.dice = Math.max(0, n); META.save(); G.render(); },
         coins(n) { META.state.coins = n; META.save(); G.render(); },
         lap(n = 1) { for (let i = 0; i < n; i++) META.onLap(); G.render(); },
         world(w) { META.state.world = Math.max(1, Math.min(WORLDS.length, w)); META.state.worldLaps = 0; META.state.pos = 0; META.save(); G.render(); },

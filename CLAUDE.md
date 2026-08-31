@@ -25,17 +25,24 @@ Set `RL.game.fast = true` to skip animation delays in scripted tests;
 `RL.cheat.dice(n)`, `RL.cheat.coins(n)`, `RL.cheat.lap(n)`, `RL.cheat.world(w)`,
 `RL.cheat.resetMeta()`.
 
-## Board meta layer (v9)
+## Board meta layer (v9, reworked v11)
 
 Runs are wrapped by a board-game hub (rendered on phase `'menu'`): a circular
 20-space loop the player moves around by spending dice earned from runs
-(win ≥1, or cross checkpoint 3; capped at `DICE_CAP`, carried between runs).
-Spaces pay coins / consumables / one-run modifiers / mini-games; each lap
-banks +1 starting move; `LAPS_TO_UNLOCK_BOSS` laps spawn a boss space —
-landing on it offers the boss run (one negative modifier, announced first),
-and clearing it advances the world. World N auto-unlocks power-up batch N
-in the draft pool (`POWERUP_BATCHES` — data, wrapped over each roster
-entry's `disabled`; batch listing never resurrects a roster-disabled pick).
+(win pays 1 + 1 per leftover move, crossing checkpoint 3 pays 1; carried
+between runs, UNCAPPED — `DICE_CAP` is reserved for a future refill
+mechanic; dice can also be bought for `DICE_PRICE_COINS`). Spaces pay
+coins / consumables / one-run modifiers / mini-games (empty spaces do
+nothing — flavour text was cut, and the meta offer auto-applies, no
+accept/decline); each lap banks +1 starting move. After
+`LAPS_TO_UNLOCK_BOSS` laps the boss REPLACES the Start-run button (it is
+not a board space) — its negative modifier is announced before the run,
+and clearing it advances the world. Targets AND move grants are per-world
+(`WORLD_CHECKPOINTS`, `WORLD_START_MOVES`, `WORLD_CHECKPOINT_MOVES`) —
+world 1 is short (~35-move runs) and batch-1-winnable. World N
+auto-unlocks power-up batch N in the draft pool (`POWERUP_BATCHES` —
+data, wrapped over each roster entry's `disabled`; batch listing never
+resurrects a roster-disabled pick).
 Worlds, space layouts, modifiers, and batches are all data tables in
 `src/app.js` — add space types / worlds / modifiers there, never in the
 engine. Meta state persists in localStorage under `rl_persistent_meta_v1`.
