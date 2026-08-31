@@ -931,8 +931,10 @@ function Board({ G }) {
       style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.4) * cell + 'px' }}>${f.text}</div>`);
   }
 
+  // board height includes the last row's lip overhang (17% of a cell), so the
+  // frame's top and bottom gaps around the visible tiles come out equal (CD)
   return h`<div className=${'board' + (G.shake ? ' shake' : '')}
-    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
+    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + Math.round(cell * 0.17) + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
     onPointerDown=${onDown} onPointerMove=${onMove} onPointerUp=${onUp} onPointerLeave=${onUp}>
     ${bg}${tiles}${cellmarks}${fx}
   </div>`;
