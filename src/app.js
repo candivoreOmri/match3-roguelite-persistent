@@ -423,6 +423,23 @@ class PersistentGame extends Game {
     this.foodCells = new Set();
   }
 
+  // 🧪 Tester tool: queued ids are injected into the next draft's first slot,
+  // bypassing tier/gate rules on purpose. Drafts touched this way are marked
+  // in draftHistory (forced: true) so pick-rate telemetry can exclude them.
+  makeOffers() {
+    const offers = super.makeOffers();
+    if (this.forcedOffers && this.forcedOffers.length && offers.length) {
+      const id = this.forcedOffers.shift();
+      const def = POWERUPS[id];
+      if (def) {
+        offers[0] = { id, ...(def.roll ? def.roll(this) : {}) };
+        this._forcedDraft = true;
+        this.callout(`🧪 Forced offer: ${def.name}`);
+      }
+    }
+    return offers;
+  }
+
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
   computeMods() {
     super.computeMods();
@@ -478,6 +495,11 @@ class PersistentGame extends Game {
   async startLevel() {
     if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
+    if (this._forcedDraft) { // 🧪 tester-forced draft — flag it for telemetry hygiene
+      this._forcedDraft = false;
+      const h = this.run.draftHistory[this.run.picks.length - 1];
+      if (h) h.forced = true;
+    }
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
     const def = POWERUPS[pick.id];
     if (def.onLevelStart) def.onLevelStart(this, pick); // spawn-once hooks (chomper family)
@@ -1517,6 +1539,39 @@ function EndScreen({ G }) {
   </div>`;
 }
 
+// 🧪 Tester panel: force any power-up into the draft. Floating button, all
+// screens; queued picks land in the NEXT draft's first slot (or reroll the
+// current draft on the spot). Forced drafts are flagged in telemetry.
+function TesterPanel({ G }) {
+  const [open, setOpen] = React.useState(false);
+  const [sel, setSel] = React.useState('chomper');
+  const [, bump] = React.useReducer(x => x + 1, 0);
+  const queue = G.forcedOffers || (G.forcedOffers = []);
+  const force = id => {
+    queue.push(id);
+    if (G.phase === 'draft') G.offers = G.makeOffers(); // reroll current draft, consuming the queue
+    bump(); G.render();
+  };
+  const opts = POWERUP_LIST.slice().sort((a, b) => a.name.localeCompare(b.name));
+  return h`<div className="tester">
+    ${open ? h`<div className="tester-body">
+      <div className="tester-title">🧪 Tester tools</div>
+      <div className="tester-row">
+        <select value=${sel} onChange=${e => setSel(e.target.value)}>
+          ${opts.map(d => h`<option key=${d.id} value=${d.id}>${d.icon} ${d.name}${d.disabled ? ' (pool-disabled)' : ''}</option>`)}
+        </select>
+        <button onClick=${() => force(sel)}>Force</button>
+      </div>
+      <div className="tester-row">
+        <button onClick=${() => force('chomper')}>😬 Force Chomper</button>
+        ${queue.length ? h`<button onClick=${() => { queue.length = 0; bump(); }}>Clear queue (${queue.length})</button>` : null}
+      </div>
+      <div className="tester-hint">Lands in the next draft's first slot (bypasses gates). During a draft it rerolls the offers immediately. Forced drafts are excluded-able in telemetry.</div>
+    </div>` : null}
+    <button className="tester-toggle" title="Tester tools" onClick=${() => setOpen(!open)}>🧪</button>
+  </div>`;
+}
+
 function App() {
   const [, force] = React.useReducer(x => x + 1, 0);
   const ref = React.useRef(null);
@@ -1534,6 +1589,8 @@ function App() {
         addScore(n) { G.score += n; G.checkLevelEnd(); G.render(); },
         setMoves(n) { G.movesLeft = n; G.render(); },
         pick(id, color) { G.run.picks.push(color !== undefined ? { id, color } : { id }); G.computeMods(); G.render(); },
+        // queue a power-up into the next draft's first slot (🧪 panel parity)
+        forceOffer(id) { (G.forcedOffers = G.forcedOffers || []).push(id); if (G.phase === 'draft') { G.offers = G.makeOffers(); } G.render(); },
       },
     };
   }
@@ -1551,6 +1608,7 @@ function App() {
       ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
       : h`<div className="bg-main bg-main-placeholder"></div>`}
     ${screen}
+    <${TesterPanel} G=${G} />
   </div>`;
 }
 
