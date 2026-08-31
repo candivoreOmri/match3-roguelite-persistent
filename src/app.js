@@ -364,6 +364,10 @@ class PersistentGame extends Game {
     this.score = 0;
     this.busy = false;
     this.computeMods();
+    // Board is built BEFORE the first draft (CD, 2026-08-31): the run-start
+    // draft overlays the live board exactly like every later draft. The first
+    // pick then lands through the normal mid-run path in startLevel.
+    this.startBoard();
     this.startDraft();
   }
 
@@ -374,9 +378,10 @@ class PersistentGame extends Game {
   }
 
   // Shared pickOffer calls startLevel after every pick — the variant
-  // dispatcher. Mid-run picks mutate the LIVE board; no regeneration, ever.
+  // dispatcher. Every pick (the first included) mutates the LIVE board;
+  // no regeneration, ever.
   startLevel() {
-    if (!this.board) { this.startRun(); return; }
+    if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
     this.growBoard();
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
@@ -391,8 +396,10 @@ class PersistentGame extends Game {
     this.render();
   }
 
-  // The run's single board generation — everything after this mutates in place.
-  startRun() {
+  // The run's single board generation — runs from newRun with ZERO picks
+  // (first-pick hooks/drips land via startLevel's normal path); everything
+  // after this mutates in place.
+  startBoard() {
     this.rows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     this.cols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
     this.movesLeft = CONFIG.START_MOVES;
@@ -409,8 +416,7 @@ class PersistentGame extends Game {
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
-    this.emit('onLevelStart'); // post-remap this is spawn-once hooks only (chomper family)
-    this.dripSeedFor(this.run.picks[0]);
+    this.emit('onLevelStart'); // no-op with no picks (spawn-once hooks live on picks)
     if (!this.findAnyMove()) this.reshuffleBoard(); // placed pieces can rarely kill the only move
     this.phase = 'level';
     this.busy = false;
@@ -643,14 +649,32 @@ class PersistentGame extends Game {
 /* ================================== UI ==================================== */
 const h = htm.bind(React.createElement);
 
-function useCellSize(cols) {
-  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 520) - 28) / cols)));
+// Slot art helper: an <img> for the slot when the manifest has it, else null
+// (caller renders its emoji/CSS fallback). See ASSET_MANIFEST.md.
+function slotImg(id, cls) {
+  return SKIN.has(id) ? h`<img className=${cls || 'skin-img'} src=${SKIN.url(id)} alt="" />` : null;
+}
+// Power-up icon: slot art (em-sized, flows like a glyph) or the roster emoji.
+function puIcon(id) {
+  return slotImg('icon.powerup.' + id, 'pu-img') || POWERUPS[id].icon;
+}
+
+function useCellSize(cols, rows) {
+  // Fit the board inside the phone frame in BOTH axes: width minus screen
+  // padding (24) + board.frame border/padding (52); height minus HUD, meters,
+  // power bar and gaps (~340). Recomputed on expand picks, not just resize.
+  const calc = () => {
+    const availW = Math.min(window.innerWidth, 430) - 76;
+    const availH = Math.min(window.innerHeight, 932) - 340;
+    return Math.max(24, Math.min(56, Math.floor(availW / cols), Math.floor(availH / rows)));
+  };
   const [s, setS] = React.useState(calc);
   React.useEffect(() => {
+    setS(calc()); // expand picks change cols/rows without a window resize
     const f = () => setS(calc());
     window.addEventListener('resize', f);
     return () => window.removeEventListener('resize', f);
-  }, [cols]);
+  }, [cols, rows]);
   return s;
 }
 
@@ -730,19 +754,27 @@ function StatsPanel() {
   </div>`;
 }
 
+// Player-facing menu is just logo + CTA; seed/toggles/stats live in a
+// collapsed DEV drawer (CD, 2026-08-31 — match-quest dev-drawer pattern).
 function MenuScreen({ G }) {
   const [seed, setSeed] = React.useState(() => String(1 + Math.floor(Math.random() * 999999999)));
+  const [dev, setDev] = React.useState(false);
   return h`<div className="screen menu">
-    <h1>🏔️ Match-3 Roguelite — Ascent</h1>
-    <p className="sub">One board, one bar. Cross ${CONFIG.CHECKPOINTS.length} score checkpoints — each pays moves and a power-up draft — then chase a high score until your moves run out.</p>
-    <div className="menu-box">
-      <label>Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
+    ${SKIN.has('logo')
+      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
+      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
+    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
+    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
+    <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
+    ${dev ? h`<div className="dev-drawer">
+      <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
       <${Toggle} G=${G} />
       <${ColourToggle} G=${G} />
-      <button className="primary" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Start run</button>
-    </div>
-    <${StatsPanel} />
-    <p className="hint">Swipe or tap two adjacent tiles to swap. Match 4 → ${SPECIAL_EMOJI[CONFIG.MATCH_4_SPAWNS]} arrow, 5 → ${SPECIAL_EMOJI[CONFIG.MATCH_5_SPAWNS]} lightning, L/T → ${SPECIAL_EMOJI[CONFIG.MATCH_SHAPE_SPAWNS]} bomb.</p>
+      <${StatsPanel} />
+    </div>` : null}
+    <div className="end-art menu-art">${SKIN.has('menu.art')
+      ? h`<img className="skin-img" src=${SKIN.url('menu.art')} alt="" />`
+      : h`<span className="end-art-label">menu.art</span>`}</div>
   </div>`;
 }
 
@@ -750,43 +782,23 @@ function ColorDot({ color }) {
   return h`<span className=${'dot bg' + color}></span>`;
 }
 
-function DraftScreen({ G }) {
-  const chips = buildChips(G);
-  const cps = G.checkpoints();
-  const next = G.run.checkpointIdx < cps.length ? cps[G.run.checkpointIdx] : null;
-  return h`<div className="screen draft">
-    <div className="draft-head">
-      <h2>Draft ${G.run.level}</h2>
-      <${Toggle} G=${G} />
-      <${ColourToggle} G=${G} />
+// Shared draft card (CD, 2026-08-31): big icon on the LEFT, name (title font)
+// + description to the right, cluster tag as a ribbon off the right edge.
+function DraftCard({ G, o, i }) {
+  const def = POWERUPS[o.id];
+  return h`<button className="card" onClick=${() => G.pickOffer(i)}>
+    <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
+    <div className="card-main">
+      <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-desc">${def.desc(o)}</div>
     </div>
-    <p className="sub">${G.board
-      ? `Score ${G.score} — ${next !== null ? `next checkpoint at ${next}` : 'endless chase!'} · 👟 ${G.movesLeft} moves banked`
-      : 'Pick a power-up — it lasts the whole run.'}</p>
-    <div className="cards">
-      ${G.offers.map((o, i) => {
-        const def = POWERUPS[o.id];
-        return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
-          <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
-          <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
-          <div className="card-desc">${def.desc(o)}</div>
-          <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
-          ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
-        </button>`;
-      })}
-    </div>
-    ${chips.length ? h`<div className="build">
-      <div className="build-title">Your build</div>
-      <div className="chip-row">${chips.map(ch => h`<span className="chip" key=${ch.key} title=${ch.def.desc(ch.pick)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
-      </span>`)}</div>
-    </div>` : null}
-    <div className="seedline">seed ${G.seed}</div>
-  </div>`;
+    <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
+    ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
+  </button>`;
 }
 
 function Board({ G }) {
-  const cell = useCellSize(G.cols);
+  const cell = useCellSize(G.cols, G.rows);
   const [sel, setSel] = React.useState(null);
   const drag = React.useRef(null);
 
@@ -835,10 +847,14 @@ function Board({ G }) {
   const bg = [], tiles = [], fx = [];
   for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
     const cellKey = K(r, c);
+    const cellSlot = ((r + c) % 2) ? 'board.cell-alt' : 'board.cell';
+    // cell backs sit ~10% LOW: the stacked piece art overhangs downward, so
+    // the back aligns with the piece's body, not its upper face (CD)
+    const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
-      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
-      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px' }}>
-      ${G.marks.has(cellKey) ? '🔄' : ''}
+      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
+      style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
+                ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
     const t = G.board[r][c];
     if (!t) continue;
@@ -848,12 +864,30 @@ function Board({ G }) {
     const tileStyle = { transform: `translate(${c * cell}px,${y}px)`, width: cell + 'px', height: cell + 'px' };
     // falling tiles: duration scales with drop distance, spring easing lands with a bounce
     if (t.fallDist) tileStyle.transition = `transform ${G.fallDur(t.fallDist)}ms cubic-bezier(.22,.9,.28,1.4)`;
+    // slot art per tile kind (CD, 2026-08-31): the coloured piece art is the
+    // BASE even for specials — the special asset is a transparent glyph
+    // painted over it. Art renders as-is; missing slots keep emoji/CSS.
+    const specialSlot = t.special
+      ? (t.special === 'arrow' ? 'special.arrow-' + (t.dir === 'h' ? 'h' : 'v') : 'special.' + t.special)
+      : null;
+    // boosted colours swap to their lit-up sprite variant (CD, 2026-08-31)
+    const pieceSlot = 'piece.' + SKIN.PIECE_SLOTS[t.color];
+    const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
+      : t.chest ? slotImg('tile.chest', 'piece-img')
+      : ((G.mods.boosts[t.color] || 0) > 0 && slotImg(pieceSlot + '.boosted', 'piece-img'))
+        || slotImg(pieceSlot, 'piece-img');
+    const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
+    // stacked volume: the art's bottom lip tucks BEHIND the row below —
+    // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
+    tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
-        ${t.chomper ? h`<span className="spe">😬</span>` : null}
-        ${t.chest ? h`<span className="spe">🎁</span>` : null}
-        ${t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
+        ${art}
+        ${spArt}
+        ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
+        ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
+        ${!spArt && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
         ${(() => {
           // total value per piece: base 1 + colour boost (+ Special score when
@@ -865,15 +899,21 @@ function Board({ G }) {
     </div>`);
   }
   const cellmarks = [];
+  // xtra-move marks ride ABOVE the tiles (opaque stacked art hides the cell)
+  for (const k of G.marks) {
+    const [r, c] = k.split(',').map(Number);
+    cellmarks.push(h`<div key=${'m' + k} className="cellmark xmark"
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.xtramove', 'mark-img') || '🔄'}</div>`);
+  }
   for (const [k, left] of G.pinatas) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'p' + k} className="cellmark pinata"
-      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>🪅<b>${left}</b></div>`);
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.pinata', 'mark-img') || '🪅'}<b>${left}</b></div>`);
   }
   for (const k of G.triples) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
-      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>×${CONFIG.TRIPLE_TILE_MULT}</div>`);
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
@@ -891,8 +931,10 @@ function Board({ G }) {
       style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.4) * cell + 'px' }}>${f.text}</div>`);
   }
 
+  // board height includes the last row's lip overhang (17% of a cell), so the
+  // frame's top and bottom gaps around the visible tiles come out equal (CD)
   return h`<div className=${'board' + (G.shake ? ' shake' : '')}
-    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
+    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + Math.round(cell * 0.17) + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
     onPointerDown=${onDown} onPointerMove=${onMove} onPointerUp=${onUp} onPointerLeave=${onUp}>
     ${bg}${tiles}${cellmarks}${fx}
   </div>`;
@@ -908,7 +950,7 @@ function PowerBar({ G }) {
       ${chips.map((ch, i) => h`<button key=${ch.key}
         className=${'chip' + (ch.def.id === 'lifesaver' && G.run.lifesaverUsed ? ' used' : '') + (info === i ? ' active' : '')}
         onClick=${() => setInfo(info === i ? null : i)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
+        ${puIcon(ch.def.id)}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
       </button>`)}
     </div>
   </div>`;
@@ -919,7 +961,7 @@ function FillupMeter({ G }) {
   const charges = G.run.picks.filter(p => p.id === 'fillup').length;
   const spent = G.run.fillTriggers >= charges; // v6: battery off once every charge is used
   if (spent) return h`<div className="fillmeter" title="Fill-up: all charges spent">
-    <span className="fill-icon">🔋</span>
+    <span className="fill-icon">${slotImg('icon.fillup', 'pu-img') || '🔋'}</span>
     <div className="fill-bar"><div className="fill-fill" style=${{ width: '100%', opacity: .35 }}></div></div>
     <span className="fill-nums">spent</span>
     <span className="fill-mult">×${G.run.multiplier}</span>
@@ -927,7 +969,7 @@ function FillupMeter({ G }) {
   const progress = G.run.fillCount - CONFIG.FILL_UP_THRESHOLD * G.run.fillTriggers;
   const pct = Math.min(100, Math.round((progress / CONFIG.FILL_UP_THRESHOLD) * 100));
   return h`<div className="fillmeter" title="Fill-up: boosted tiles matched toward the next multiplier">
-    <span className="fill-icon">🔋</span>
+    <span className="fill-icon">${slotImg('icon.fillup', 'pu-img') || '🔋'}</span>
     <div className="fill-bar"><div className="fill-fill" style=${{ width: pct + '%' }}></div></div>
     <span className="fill-nums">${progress}/${CONFIG.FILL_UP_THRESHOLD}</span>
     <span className="fill-mult">×${G.run.multiplier}</span>
@@ -941,7 +983,7 @@ function SnowballMeter({ G }) {
   const bar = CONFIG.SNOWBALL_BAR;
   const c = Math.min(G.run.snowCharge || 0, bar);
   return h`<div className="fillmeter" title="Snowball: full bar = permanent bonus points on every match you make">
-    <span className="fill-icon">❄️</span>
+    <span className="fill-icon">${slotImg('icon.snowball', 'pu-img') || '❄️'}</span>
     <div className="fill-bar"><div className="fill-fill sfill" style=${{ width: Math.round((c / bar) * 100) + '%' }}></div></div>
     <span className="fill-nums">${c}/${bar}</span>
     <span className="fill-mult">+${G.run.snowBonus || 0}</span>
@@ -955,7 +997,7 @@ function MomentumMeter({ G }) {
   const cur = Math.min(G.run.momentum || 0, need);
   const pct = Math.min(100, Math.round((cur / need) * 100));
   return h`<div className="fillmeter" title="Momentum: 4+ matches you make charge a bonus move">
-    <span className="fill-icon">🚀</span>
+    <span className="fill-icon">${slotImg('icon.momentum', 'pu-img') || '🚀'}</span>
     <div className="fill-bar"><div className="fill-fill mfill" style=${{ width: pct + '%' }}></div></div>
     <span className="fill-nums">${cur}/${need}</span>
     <span className="fill-mult">+1 👟</span>
@@ -964,41 +1006,48 @@ function MomentumMeter({ G }) {
 
 function LevelScreen({ G }) {
   const cps = G.checkpoints();
-  const n = cps.length;
   const idx = G.run.checkpointIdx;
-  const next = idx < n ? cps[idx] : null;
-  // Equal-spaced checkpoint segments (linear score would cram the early flags
-  // into the bar's first 10%); the fill interpolates within the live segment.
+  const next = idx < cps.length ? cps[idx] : null;
+  // Goals UX (CD, 2026-08-31): each goal is its own bar — the fill tracks
+  // progress within the CURRENT goal only and resets when it's cleared.
   const prev = idx > 0 ? cps[idx - 1] : 0;
-  const frac = next !== null ? Math.max(0, Math.min(1, (G.score - prev) / (next - prev))) : 1;
-  const pct = Math.min(100, ((idx + frac) / n) * 100);
+  const pct = next !== null ? Math.max(0, Math.min(100, ((G.score - prev) / (next - prev)) * 100)) : 100;
   const cp = G.lastCheckpoint;
   return h`<div className="screen level-screen">
-    <div className="hud">
-      <div className="hud-lv">🚩 ${G.run.checkpointIdx}/${cps.length}</div>
-      <div className="hud-score">
-        <div className="bar runbar">
-          <div className="fill" style=${{ width: pct + '%' }}></div>
-          ${cps.map((v, i) => h`<div key=${i} title=${v}
-            className=${'cp-tick' + (G.score >= v ? ' done' : '')}
-            style=${{ left: ((i + 1) / n) * 100 + '%' }}></div>`)}
+    <div className="board-stack">
+      <div className="hud">
+        <div className=${'hud-moves-box' + (G.movesLeft <= 3 ? ' low' : '')}>
+          <span className="hmb-label">Moves</span>
+          <b className="hmb-num">${G.movesLeft}</b>
+          <span className="movecap">MAX ${CONFIG.MAX_MOVES}</span>
         </div>
-        <div className="nums">${G.score}${next !== null ? ` / ${next}` : h` <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
+        <div className="hud-goal">
+          <div className="goal-row">${cps.map((v, i) => h`<span key=${i} title=${v}
+            className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
+          <div className="bar goalbar">
+            <div className="fill" style=${{ width: pct + '%' }}></div>
+            <div className="bar-label">${next !== null
+              ? `${Math.max(0, G.score - prev)} / ${next - prev}`
+              : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
+          </div>
+        </div>
+        ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
+          onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
-      <div className=${'hud-moves' + (G.movesLeft <= 3 ? ' low' : '')}>👟 ${G.movesLeft}<span className="movecap">/${CONFIG.MAX_MOVES}</span></div>
-      ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
-        onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
+      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}
+        style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 96 fill / 20px stretch`, borderWidth: '20px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '6px' } : null}><${Board} G=${G} /></div>
+      <div className="meters">
+        <${FillupMeter} G=${G} />
+        <${MomentumMeter} G=${G} />
+        <${SnowballMeter} G=${G} />
+      </div>
     </div>
-    <${FillupMeter} G=${G} />
-    <${MomentumMeter} G=${G} />
-    <${SnowballMeter} G=${G} />
-    <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
     <${PowerBar} G=${G} />
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
-      <div className="panel">
-        <h2>🚩 Checkpoint ${cp.n}${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves${cp.final ? ' — final flag planted! The endless chase begins 🔥' : ''}</p>
+      <div className="panel goal-panel">
+        <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
+        <p>+${cp.moves} moves${cp.final ? ' — final goal cleared! The endless chase begins 🔥' : ''}</p>
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}
@@ -1006,22 +1055,16 @@ function LevelScreen({ G }) {
   </div>`;
 }
 
-// Mid-run draft: compact cards UNDER the board — testers pick with the board
-// in view (colour counts, marks, chest positions are part of the decision).
+// Every draft (run-start included) is an overlay OVER the board — darkened
+// scrim, cards on top (CD, 2026-08-31). Subtitle names the goal just reached.
 function InlineDraft({ G }) {
-  return h`<div className="draft-inline">
-    <div className="draft-inline-title">Draft ${G.run.level} — pick a power-up</div>
-    <div className="cards">
-      ${G.offers.map((o, i) => {
-        const def = POWERUPS[o.id];
-        return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
-          <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
-          <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
-          <div className="card-desc">${def.desc(o)}</div>
-          <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
-          ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
-        </button>`;
-      })}
+  return h`<div className="overlay draft-overlay">
+    <div className="draft-sheet">
+      <div className="draft-sub">${G.run.checkpointIdx > 0 ? `Goal ${G.run.checkpointIdx}` : 'The run begins'}</div>
+      <div className="draft-title">Pick a Spell</div>
+      <div className="cards">
+        ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
+      </div>
     </div>
   </div>`;
 }
@@ -1036,27 +1079,30 @@ function EndScreen({ G }) {
     catch (e) { setShowRaw(true); }
   };
   return h`<div className="screen end">
-    <h1>${win ? '🏆 Summit reached!' : '💀 Out of moves'}</h1>
+    <div className="end-sub">${win ? '🏆 Summit reached — endless chase complete!' : '💀 Out of moves'}</div>
+    <h1>Cleared ${G.run.checkpointIdx} ${G.run.checkpointIdx === 1 ? 'goal' : 'goals'}!</h1>
     <div className="end-stats">
-      <div><b>${G.run.checkpointIdx}</b> / ${CONFIG.CHECKPOINTS.length} checkpoints crossed</div>
       <div><b>${G.score}</b> final score</div>
       <div className="seedline">seed ${G.seed}</div>
     </div>
     ${chips.length ? h`<div className="build">
       <div className="build-title">Final build</div>
       <div className="chip-row">${chips.map(ch => h`<span className="chip" key=${ch.key} title=${ch.def.desc(ch.pick)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
+        ${puIcon(ch.def.id)}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
       </span>`)}</div>
     </div>` : null}
     <div className="end-buttons">
-      <button className="primary" onClick=${() => G.newRun(1 + Math.floor(Math.random() * 999999999))}>New run</button>
-      <button onClick=${() => G.newRun(G.seed)}>Replay this seed</button>
-    </div>
-    <div className="end-export">
-      <button onClick=${copy}>${copied ? '✅ Copied — send it to the designer!' : '📤 Copy my play data'}</button>
+      <button className="primary" onClick=${() => G.newRun(1 + Math.floor(Math.random() * 999999999))}>Play again</button>
+      <div className="end-secondary">
+        <button onClick=${() => G.newRun(G.seed)}>Replay this seed</button>
+        <button onClick=${copy}>${copied ? '✅ Copied' : '📤 Copy my play data'}</button>
+      </div>
       ${showRaw ? h`<textarea className="rawdata" readOnly value=${JSON.stringify(telemetryAll())}
         onFocus=${e => e.target.select()} onClick=${e => e.target.select()}></textarea>` : null}
     </div>
+    <div className="end-art">${SKIN.has('end.art')
+      ? h`<img className="skin-img" src=${SKIN.url('end.art')} alt="" />`
+      : h`<span className="end-art-label">end.art</span>`}</div>
   </div>`;
 }
 
@@ -1081,12 +1127,20 @@ function App() {
     };
   }
   const G = ref.current;
-  if (G.phase === 'menu') return h`<${MenuScreen} G=${G} />`;
-  // Run-start draft has no board yet → full screen. Mid-run drafts render
-  // inside LevelScreen so the board stays visible (tester feedback).
-  if (G.phase === 'draft' && !G.board) return h`<${DraftScreen} G=${G} />`;
-  if (G.phase === 'win' || G.phase === 'loss') return h`<${EndScreen} G=${G} />`;
-  return h`<${LevelScreen} G=${G} />`;
+  let screen;
+  if (G.phase === 'menu') screen = h`<${MenuScreen} G=${G} />`;
+  // Every draft — the run-start one included — renders as an overlay inside
+  // LevelScreen, so the board is always in view while picking.
+  else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
+  else screen = h`<${LevelScreen} G=${G} />`;
+  // Everything lives inside the phone frame; overlays/callouts anchor to it.
+  // Backdrop: CD art via the bg.main slot; CSS mystical placeholder until then.
+  return h`<div className="phone">
+    ${SKIN.has('bg.main')
+      ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
+      : h`<div className="bg-main bg-main-placeholder"></div>`}
+    ${screen}
+  </div>`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(h`<${App} />`);
