@@ -848,15 +848,21 @@ class Game {
           write--;
         }
       }
-      const newCount = write + 1; // refills only reach the column's top segment
-      for (let r = write; r >= 0; r--) {
+      // Refill EVERY empty slot left in the column. New tiles enter from
+      // above the board and drop past gravity-fixed tiles into the gaps
+      // beneath them — fixed tiles block FALLING tiles, never incoming
+      // fills. (No fixed tiles → empties are the contiguous top segment and
+      // this is exactly the old behaviour.)
+      const empties = [];
+      for (let r = 0; r < this.rows; r++) if (!this.board[r][c]) empties.push(r);
+      empties.forEach((r, i) => {
         const t = this.makeRefillTile(r, c);
-        t.enter = r - newCount; // start above the board, then fall in
-        t.fallDist = newCount;
-        maxFall = Math.max(maxFall, newCount);
+        t.enter = i - empties.length; // stacked above the board, in order
+        t.fallDist = r - t.enter;
+        maxFall = Math.max(maxFall, t.fallDist);
         this.board[r][c] = t;
         any = true;
-      }
+      });
     }
     if (!any) return;
     this.render(); await this.sleep(30);

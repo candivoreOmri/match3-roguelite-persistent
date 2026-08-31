@@ -605,10 +605,33 @@ class PersistentGame extends Game {
     this.topUpFood(); // fill the rest of the table
   }
 
+  // v10 Chomper timing: he resolves FIRST — his step happens right after
+  // the swap lands, before matches clear or gravity runs, so aiming him at
+  // a snack can't be spoiled by the board churning under him. His own
+  // trailing board-settle is suppressed here; the outer resolveBoard then
+  // resolves everything WITH swapCells, keeping the player's match ACTIVE
+  // (sweep/snowball/momentum/mark-refund semantics intact).
+  async resolveBoard(swapCells) {
+    if (this._suppressResolve) return; // chomper's internal settle — the outer call covers it
+    if (swapCells && this.mods.chomper && this.phase === 'level') {
+      this._suppressResolve = true;
+      try { await this.chomperStepAndEat(); } finally { this._suppressResolve = false; }
+      this._chomperStepped = true; // endOfMove must not step him twice
+    }
+    await super.resolveBoard(swapCells);
+  }
+
+  // Shared endOfMove hook — skip when he already pre-stepped this move
+  // (merge moves and board effects still reach here and step him normally).
+  async chomperMove() {
+    if (this._chomperStepped) { this._chomperStepped = false; return; }
+    await this.chomperStepAndEat();
+  }
+
   // Eat on arrival: after his step, any Chomper standing on a food cell
   // consumes it (cell marks never move, so position is the identity); the
   // table is restocked the same move — CHOMPER_FOOD_COUNT (+Buffet) always.
-  async chomperMove() {
+  async chomperStepAndEat() {
     await super.chomperMove();
     if (!this.foodCells.size) return;
     let ate = false;
