@@ -144,7 +144,13 @@ Refs cite folders in `~/Desktop/uxi ref library`.
   celebration panel). Typography/HUD structure landed earlier via CD rounds.
   Remaining G4 ambition (enchanted-trail bar art) waits on ui.progressbar-*
   / icon.flag slots.
-- [ ] Phase B
-- [ ] Phase C
+- [x] Phase B — done 2026-08-31: board frame + per-cell grid (CD round 2), and
+  the whole board renderer wired to skin slots — pieces, specials, chest,
+  chomper, and board markers all take CD art from skin.json with fallbacks
+  intact (pipeline verified with a throwaway asset). Near-touching piece
+  spacing deferred until piece art lands (grid lines are the current look).
+- [ ] Phase C — mostly landed via CD rounds (draft overlay + Pick a Spell
+  cards + goal-panel glow); remaining: legendary shine, richer goal-clear
+  celebration (flag plant / burst / move count-up)
 - [ ] Phase D
 - [ ] Phase E
