@@ -71,6 +71,8 @@ body {
 
 /* skin-slot img hosts: constrain injected art to its box (match-quest .slot-ic fix) */
 .slot-ic, .skin-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* icon art that flows like an emoji glyph (chips, cards, meters) */
+.pu-img { width: 1.15em; height: 1.15em; object-fit: contain; display: inline-block; vertical-align: -0.2em; }
 
 /* ------- mobile phone frame: the whole game lives inside it -------
    Overlays and callouts are position:absolute so they anchor to the frame,
@@ -150,10 +152,22 @@ button.primary {
 .toggle { font-size: 13px; color: var(--text-dim); }
 .toggle b { color: var(--gold); }
 
-/* ------- menu ------- */
-.menu-box { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; width: 260px; }
-.menu-box label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
-.menu-box input {
+/* ------- menu (player-facing: logo + CTA; dev controls in the drawer) ------- */
+.menu-logo { width: 84%; max-width: 360px; margin-top: 44px; }
+.menu-start { margin-top: 12px; min-width: 220px; }
+.devtoggle {
+  margin-top: 30px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-faint);
+  background: none; border: 1px dashed var(--border); border-radius: 10px; padding: 6px 14px;
+}
+.dev-drawer {
+  margin-top: 12px; width: 300px; display: flex; flex-direction: column;
+  gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px;
+}
+.dev-seed { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 13px; color: var(--text-dim); }
+.dev-seed input {
   flex: 1; font: inherit; color: var(--text); background: var(--sunken);
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0;
 }
@@ -325,6 +339,8 @@ button.primary {
   display: flex; align-items: center; justify-content: center; font-size: 13px;
 }
 .bgcell.alt { background: rgba(255,255,255,.06); }
+/* cell art from board.cell / board.cell-alt: the image carries its own frame */
+.bgcell.img { box-shadow: none; background-color: transparent; }
 .bgcell.mark { box-shadow: inset 0 0 0 2px var(--gold); background: rgba(255,213,74,.12); }
 .bgcell.pin { box-shadow: inset 0 0 0 2px #ff7ac8; background: rgba(255,122,200,.14); }
 .bgcell.tri { box-shadow: inset 0 0 0 2px #58e0d0; background: rgba(88,224,208,.14); }

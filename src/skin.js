@@ -44,3 +44,26 @@ const SKIN = (() => {
   };
 })();
 window.SKIN = SKIN;
+
+/* ---- ui.* chrome slots, injected once as CSS so every element (including
+   dynamically rendered ones) inherits them. 128×128 9-slice sources,
+   border-image slice 42 (match-quest pattern). Missing slots = CSS chrome. */
+(() => {
+  const rules = [];
+  const nine = (sel, slot, px) => {
+    if (SKIN.has(slot)) rules.push(
+      `${sel}{border:${px}px solid transparent;border-image:url(${SKIN.url(slot)}) 42 fill / ${px}px stretch;background:none;box-shadow:none;}`);
+  };
+  nine('button.primary', 'ui.button-primary', 12);
+  nine('.hud, .fillmeter, .panel, .stats-body, .chip-info, .dev-drawer', 'ui.panel', 10);
+  nine('.card', 'ui.overlay-card', 12);
+  if (SKIN.has('ui.progressbar-track')) rules.push(
+    `.bar{background:url(${SKIN.url('ui.progressbar-track')});background-size:100% 100%;border:none;}`);
+  if (SKIN.has('ui.progressbar-fill')) rules.push(
+    `.goalbar .fill{background:url(${SKIN.url('ui.progressbar-fill')});background-size:100% 100%;}`);
+  if (rules.length) {
+    const st = document.createElement('style');
+    st.textContent = rules.join('\n');
+    document.head.appendChild(st);
+  }
+})();

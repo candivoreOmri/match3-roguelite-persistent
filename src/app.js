@@ -654,6 +654,10 @@ const h = htm.bind(React.createElement);
 function slotImg(id, cls) {
   return SKIN.has(id) ? h`<img className=${cls || 'skin-img'} src=${SKIN.url(id)} alt="" />` : null;
 }
+// Power-up icon: slot art (em-sized, flows like a glyph) or the roster emoji.
+function puIcon(id) {
+  return slotImg('icon.powerup.' + id, 'pu-img') || POWERUPS[id].icon;
+}
 
 function useCellSize(cols) {
   // board sizes to the phone frame (.phone, 430px), not the raw viewport;
@@ -744,19 +748,25 @@ function StatsPanel() {
   </div>`;
 }
 
+// Player-facing menu is just logo + CTA; seed/toggles/stats live in a
+// collapsed DEV drawer (CD, 2026-08-31 — match-quest dev-drawer pattern).
 function MenuScreen({ G }) {
   const [seed, setSeed] = React.useState(() => String(1 + Math.floor(Math.random() * 999999999)));
+  const [dev, setDev] = React.useState(false);
   return h`<div className="screen menu">
-    <h1>🏔️ Match-3 Roguelite — Ascent</h1>
-    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a power-up draft — then chase a high score until your moves run out.</p>
-    <div className="menu-box">
-      <label>Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
+    ${SKIN.has('logo')
+      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
+      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
+    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
+    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Start run</button>
+    <p className="hint">Swipe or tap two adjacent tiles to swap. Match 4 → arrow, 5 → lightning, L/T shape → bomb.</p>
+    <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
+    ${dev ? h`<div className="dev-drawer">
+      <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
       <${Toggle} G=${G} />
       <${ColourToggle} G=${G} />
-      <button className="primary" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Start run</button>
-    </div>
-    <${StatsPanel} />
-    <p className="hint">Swipe or tap two adjacent tiles to swap. Match 4 → ${SPECIAL_EMOJI[CONFIG.MATCH_4_SPAWNS]} arrow, 5 → ${SPECIAL_EMOJI[CONFIG.MATCH_5_SPAWNS]} lightning, L/T → ${SPECIAL_EMOJI[CONFIG.MATCH_SHAPE_SPAWNS]} bomb.</p>
+      <${StatsPanel} />
+    </div>` : null}
   </div>`;
 }
 
@@ -769,7 +779,7 @@ function ColorDot({ color }) {
 function DraftCard({ G, o, i }) {
   const def = POWERUPS[o.id];
   return h`<button className="card" onClick=${() => G.pickOffer(i)}>
-    <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
+    <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
     <div className="card-main">
       <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
       <div className="card-desc">${def.desc(o)}</div>
@@ -829,9 +839,11 @@ function Board({ G }) {
   const bg = [], tiles = [], fx = [];
   for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
     const cellKey = K(r, c);
+    const cellSlot = ((r + c) % 2) ? 'board.cell-alt' : 'board.cell';
     bg.push(h`<div key=${'b' + r + '_' + c}
-      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
-      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px' }}>
+      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
+      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px',
+                ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
       ${G.marks.has(cellKey) ? (slotImg('marker.xtramove') || '🔄') : ''}
     </div>`);
     const t = G.board[r][c];
@@ -912,7 +924,7 @@ function PowerBar({ G }) {
       ${chips.map((ch, i) => h`<button key=${ch.key}
         className=${'chip' + (ch.def.id === 'lifesaver' && G.run.lifesaverUsed ? ' used' : '') + (info === i ? ' active' : '')}
         onClick=${() => setInfo(info === i ? null : i)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
+        ${puIcon(ch.def.id)}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
       </button>`)}
     </div>
   </div>`;
@@ -923,7 +935,7 @@ function FillupMeter({ G }) {
   const charges = G.run.picks.filter(p => p.id === 'fillup').length;
   const spent = G.run.fillTriggers >= charges; // v6: battery off once every charge is used
   if (spent) return h`<div className="fillmeter" title="Fill-up: all charges spent">
-    <span className="fill-icon">🔋</span>
+    <span className="fill-icon">${slotImg('icon.fillup', 'pu-img') || '🔋'}</span>
     <div className="fill-bar"><div className="fill-fill" style=${{ width: '100%', opacity: .35 }}></div></div>
     <span className="fill-nums">spent</span>
     <span className="fill-mult">×${G.run.multiplier}</span>
@@ -931,7 +943,7 @@ function FillupMeter({ G }) {
   const progress = G.run.fillCount - CONFIG.FILL_UP_THRESHOLD * G.run.fillTriggers;
   const pct = Math.min(100, Math.round((progress / CONFIG.FILL_UP_THRESHOLD) * 100));
   return h`<div className="fillmeter" title="Fill-up: boosted tiles matched toward the next multiplier">
-    <span className="fill-icon">🔋</span>
+    <span className="fill-icon">${slotImg('icon.fillup', 'pu-img') || '🔋'}</span>
     <div className="fill-bar"><div className="fill-fill" style=${{ width: pct + '%' }}></div></div>
     <span className="fill-nums">${progress}/${CONFIG.FILL_UP_THRESHOLD}</span>
     <span className="fill-mult">×${G.run.multiplier}</span>
@@ -945,7 +957,7 @@ function SnowballMeter({ G }) {
   const bar = CONFIG.SNOWBALL_BAR;
   const c = Math.min(G.run.snowCharge || 0, bar);
   return h`<div className="fillmeter" title="Snowball: full bar = permanent bonus points on every match you make">
-    <span className="fill-icon">❄️</span>
+    <span className="fill-icon">${slotImg('icon.snowball', 'pu-img') || '❄️'}</span>
     <div className="fill-bar"><div className="fill-fill sfill" style=${{ width: Math.round((c / bar) * 100) + '%' }}></div></div>
     <span className="fill-nums">${c}/${bar}</span>
     <span className="fill-mult">+${G.run.snowBonus || 0}</span>
@@ -959,7 +971,7 @@ function MomentumMeter({ G }) {
   const cur = Math.min(G.run.momentum || 0, need);
   const pct = Math.min(100, Math.round((cur / need) * 100));
   return h`<div className="fillmeter" title="Momentum: 4+ matches you make charge a bonus move">
-    <span className="fill-icon">🚀</span>
+    <span className="fill-icon">${slotImg('icon.momentum', 'pu-img') || '🚀'}</span>
     <div className="fill-bar"><div className="fill-fill mfill" style=${{ width: pct + '%' }}></div></div>
     <span className="fill-nums">${cur}/${need}</span>
     <span className="fill-mult">+1 👟</span>
@@ -996,7 +1008,8 @@ function LevelScreen({ G }) {
         ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
           onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
-      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
+      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}
+        style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 42 fill / 12px stretch`, borderWidth: '12px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '4px' } : null}><${Board} G=${G} /></div>
       <div className="meters">
         <${FillupMeter} G=${G} />
         <${MomentumMeter} G=${G} />
@@ -1049,7 +1062,7 @@ function EndScreen({ G }) {
     ${chips.length ? h`<div className="build">
       <div className="build-title">Final build</div>
       <div className="chip-row">${chips.map(ch => h`<span className="chip" key=${ch.key} title=${ch.def.desc(ch.pick)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
+        ${puIcon(ch.def.id)}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
       </span>`)}</div>
     </div>` : null}
     <div className="end-buttons">

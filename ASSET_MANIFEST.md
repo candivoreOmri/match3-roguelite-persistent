@@ -10,6 +10,14 @@ Paths are relative to `src/assets/`. A slot missing from the manifest falls
 back to the current emoji/CSS rendering — the game always plays with zero art.
 Drop a file in, add its line to `skin.json`, reload. No code changes.
 
+**Status (2026-08-31):** every slot has a generated, self-labelling placeholder
+(colour-correct pieces, emoji-true icons), produced by
+`python3 tools/gen_placeholders.py`. To replace one hands-on: **paint over /
+overwrite the PNG at its canonical path** — same filename, done. The generator
+can be rerun safely at any time: it hashes files against
+`src/assets/placeholders.sha1` and never touches a file whose hash isn't in
+the ledger (that's yours).
+
 **Hard rules** (same as match-quest):
 1. CD art files are never overwritten. Generated placeholder art is recorded in
    `src/assets/placeholders.sha1`; a file whose hash isn't in that ledger is CD

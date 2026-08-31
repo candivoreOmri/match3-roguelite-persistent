@@ -152,5 +152,15 @@ Refs cite folders in `~/Desktop/uxi ref library`.
 - [ ] Phase C — mostly landed via CD rounds (draft overlay + Pick a Spell
   cards + goal-panel glow); remaining: legendary shine, richer goal-clear
   celebration (flag plant / burst / move count-up)
-- [ ] Phase D
+- [x] Asset-wave enablement — done 2026-08-31: `tools/gen_placeholders.py`
+  generated self-labelling placeholders for all 74 slots (pieces, specials,
+  tiles, markers, icons, all 42 power-up icons, bg/logo/end-art, board
+  cells/frame, ui 9-slices), mapped in skin.json + ledgered. Every surface is
+  wired: board, chips, draft cards, meters, menu logo, backdrop, end art,
+  ui chrome via 9-slice injection in skin.js. CD replaces art by overwriting
+  the PNG at its path — the ledger protects CD files from regeneration.
+- [x] Phase D (menu part) — player-facing menu is logo + CTA; seed/toggles/
+  stats collapsed into a DEV drawer (Q4 approved).
+- [ ] Phase D (rest) — end-screen restyle done via CD rounds; callouts G13 done
+  via title treatment; remaining: nothing structural — fold leftovers into E.
 - [ ] Phase E
