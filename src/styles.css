@@ -860,3 +860,42 @@ button.primary.danger { background: linear-gradient(135deg, #ff5a4c, #b3261e); b
 .tester-tools summary { color: #565c6e; font-size: 12px; cursor: pointer; list-style: none; }
 .tester-tools[open] summary { margin-bottom: 10px; }
 .tester-tools .menu-box { margin: 0 auto; }
+
+/* ---- v9: chomper food cells (cell layer, like xtra-move marks) ---- */
+.bgcell.foodc { box-shadow: inset 0 0 0 2px #ffb35c; background: rgba(255,179,92,.16); }
+.cellmark.food {
+  border: 1px solid #ffb35c; color: #ffd9a0; font-size: 13px;
+  animation: foodWaft 1.8s ease-in-out infinite;
+}
+@keyframes foodWaft {
+  0%, 100% { transform: translate(-3px,-3px) scale(1); }
+  50% { transform: translate(-3px,-3px) scale(1.12); }
+}
+
+/* ---- v10: blockers (placeholder looks until tile.blocker.* art lands) ---- */
+.tin.blocker.box { background: linear-gradient(160deg, #9a7b4f, #5d4527); border-radius: 6px; }
+.tin.blocker.box.hits2 { background: linear-gradient(160deg, #8a6c42, #4e3a20); box-shadow: inset 0 -3px 0 rgba(0,0,0,.35), inset 4px 2px 0 rgba(0,0,0,.25); }
+.tin.blocker.box.hits1 { background: linear-gradient(160deg, #745936, #3f2e18); box-shadow: inset 0 -3px 0 rgba(0,0,0,.45), inset 6px 3px 0 rgba(0,0,0,.4), inset -5px -2px 0 rgba(0,0,0,.3); animation: boxShudder 1.4s ease-in-out infinite; }
+@keyframes boxShudder { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-1.5deg); } 75% { transform: rotate(1.5deg); } }
+.tin.blocker.water {
+  background: linear-gradient(160deg, rgba(80,160,255,.55), rgba(20,80,200,.65));
+  backdrop-filter: blur(1px); border-radius: 10px;
+  box-shadow: inset 0 -3px 0 rgba(0,0,60,.3), inset 0 2px 0 rgba(255,255,255,.35), 0 0 8px rgba(80,160,255,.35);
+  animation: waterSway 2.2s ease-in-out infinite;
+}
+@keyframes waterSway { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+.tin.blocker.water.ripple { animation: waterRipple .7s ease-out; }
+@keyframes waterRipple {
+  0% { transform: scale(.3); filter: brightness(1.8); box-shadow: 0 0 22px rgba(80,160,255,.9); }
+  60% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+.tin.blocker.safe { background: linear-gradient(160deg, #6b7280, #374151); border-radius: 8px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.4), inset 0 2px 0 rgba(255,255,255,.2), 0 0 6px rgba(255,213,74,.15); }
+.safeslots { position: absolute; bottom: 2px; left: 0; right: 0; display: flex; justify-content: center; gap: 2px; }
+.safeslot { width: 6px; height: 6px; border-radius: 50%; background: #1b1e27; border: 1px solid #10131a; }
+.safeslot.lit.bgdot0 { background: #ff5b4d; box-shadow: 0 0 5px #ff5b4d; }
+.safeslot.lit.bgdot1 { background: #ffdf3d; box-shadow: 0 0 5px #ffdf3d; }
+.safeslot.lit.bgdot2 { background: #3fe36c; box-shadow: 0 0 5px #3fe36c; }
+.safeslot.lit.bgdot3 { background: #4aa4ff; box-shadow: 0 0 5px #4aa4ff; }
+.safeslot.lit.bgdot4 { background: #c257ff; box-shadow: 0 0 5px #c257ff; }
+.safeslot.lit.bgdot5 { background: #ffa02e; box-shadow: 0 0 5px #ffa02e; }

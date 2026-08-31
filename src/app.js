@@ -17,7 +17,43 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 14, // v14: world-1 checkpoint move grants trimmed (Omri: refills too generous)
+  // NOTE: the board-meta line counted v9-v14 while the blockers/food line
+  // independently counted v9-v10 — v15 is the first shared number after the
+  // two branches merged (2026-09-01).
+  BALANCE_VERSION: 15, // v15: board-meta (dice/worlds/consumables) + blockers + chomper food, merged
+
+  // Blockers: inert tiles cleared only through their own interaction (see
+  // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
+  // this branch's ongoing board generation — once run.checkpointIdx reaches
+  // its intro checkpoint; before that its chance is 0. Chances are per
+  // refill tile; caps bound how many of a type exist at once (drip-style —
+  // without them a 15% per-tile chance floods a persistent board).
+  BLOCKER_STATIC_BOX_CHANCE: 0.15,
+  BLOCKER_WATER_CHANCE: 0.08,
+  BLOCKER_COLOR_SAFE_CHANCE: 0.05,
+  // v15 merge remap: the original gates (3/5/7) were tuned for the endless
+  // pre-v10 game — runs now END at the final flag (3 flags on world-1
+  // regular runs, 6 on bosses/worlds 2-3), which made water barely reachable
+  // and safes IMPOSSIBLE. Remapped so each blocker gets real screen time in
+  // a 6-flag run; world-1 regular runs (3 flags) only ever meet the box.
+  // Needs a proper per-world design pass (flagged in the PR).
+  BLOCKER_INTRO_CHECKPOINT_BOX: 2,
+  BLOCKER_INTRO_CHECKPOINT_WATER: 3,
+  BLOCKER_INTRO_CHECKPOINT_SAFE: 4,
+  BLOCKER_STATIC_BOX_HITS: 3,
+  BLOCKER_WATER_SPREAD_INTERVAL: 1,  // water spreads every Nth player move
+  BLOCKER_COLOR_SAFE_COLORS_REQUIRED: 4, // of 5 (all of them when fewer colours are active)
+  BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
+  BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
+
+  // Chomper food: cell-layer snacks only Chomper can consume, paying
+  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
+  // while Chomper is in the build — every eaten snack is replaced at a
+  // random valid interior cell the same move. Buffet adds more (stacks).
+  CHOMPER_FOOD_BONUS: 20,
+  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
+  CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
+  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -26,7 +62,7 @@ const CONFIG = {
   // moves from death. v6: 20 → 16 (Omri: still too little danger); with the
   // v6 grants (max 13) a tight crossing still fits, stacked surpluses don't.
   MAX_MOVES: 16,
-  SQUARE_BONUS_POINTS: 10,         // square bonus upgrade: flat points per square match
+  SQUARE_BONUS_MULTIPLIER: 2,      // square bonus upgrade: the 4 square tiles score ×this (all bonuses included)
   CHOMPER_WRAP: true,  // edges wrap Pac-Man style; false = stay in place at edges
 
   // Remote telemetry sink — SHARED table with the base game (records separate
@@ -228,6 +264,33 @@ Object.defineProperty(CONFIG, 'COUNTDOWN_TIMER_START', {
   },
 });
 
+/* ------------------------------ Blockers ----------------------------------
+   Data-driven registry: a new blocker type = a new entry here (+ visuals),
+   no engine changes. `intro` gates by checkpoints crossed; `chance` is per
+   refill tile; `cap` bounds concurrency; `make` returns the tile fields.
+   All blockers are protectedTile (nothing clears them but their own rule)
+   and immovableTile (can't be swapped). They ride gravity like chests. */
+const BLOCKERS = {
+  box: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_BOX,
+    chance: () => CONFIG.BLOCKER_STATIC_BOX_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.box,
+    make:   () => ({ hits: CONFIG.BLOCKER_STATIC_BOX_HITS }),
+  },
+  water: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_WATER,
+    chance: () => CONFIG.BLOCKER_WATER_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.water,
+    make:   () => ({}),
+  },
+  safe: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_SAFE,
+    chance: () => CONFIG.BLOCKER_COLOR_SAFE_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.safe,
+    make:   () => ({ lit: [] }), // colour indexes matched adjacent so far
+  },
+};
+
 /* --------------------- Variant telemetry storage --------------------------
    The shared helpers are bound to the base game's localStorage key, so the
    fork reassigns them (they're plain function declarations = writable
@@ -361,6 +424,18 @@ POWERUPS.snowpaint = {
 };
 POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is built at load time
 
+// v9 chomper desc mentions his snacks (mechanics in PersistentGame below —
+// movement steering stays SECRET, never hint at it).
+POWERUPS.chomper.desc = () => `A hungry critter roams the board — after each move you make it eats one piece at full value (specials detonate; 🍖 snacks pay +${CONFIG.CHOMPER_FOOD_BONUS})`;
+
+// Buffet: more snacks on the table (chomper-family upgrade, stackable).
+POWERUPS.buffet = {
+  id: 'buffet', name: 'Buffet', icon: '🍱', cluster: 'utility', stackable: true, tier: 2, requiresChomper: true,
+  desc: () => `${CONFIG.CHOMPER_BUFFET_TILES} more 🍖 snacks stay on the board for Chomper (stacks)`,
+  mods(m) { m.foodBonusTiles = (m.foodBonusTiles || 0) + CONFIG.CHOMPER_BUFFET_TILES; },
+};
+POWERUP_LIST.push(POWERUPS.buffet);
+
 // v7 Spicy Trail: scorch PERSISTS until matched (shared engine gives it a
 // 1-move expiry, which made triggering it nearly impossible — you'd need a
 // match through one specific fresh tile on the very next move). Chomper now
@@ -369,6 +444,33 @@ POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is bui
 // 1-move scorch — this only touches the trail. Override is in
 // PersistentGame.backfillChomperTrail below.
 POWERUPS.spicytrail.desc = () => 'Tiles Chomper leaves behind stay scorched until matched — matching one sets off a small blast';
+
+// v10 Square bonus rework: flat +10 → the 4 square-match tiles score
+// ×SQUARE_BONUS_MULTIPLIER at their full per-tile value (colour boost,
+// special score, and the run multiplier all included, since addBonus feeds
+// the same ×multiplier pipeline). Tiles beyond the square — merged straight
+// runs, cascades, explosions — score normally.
+Object.assign(POWERUPS.squarescore, {
+  desc: () => `The 4 tiles of a square match score ×${CONFIG.SQUARE_BONUS_MULTIPLIER} (all bonuses included)`,
+  onMatch(g, p, group, api) {
+    if (!group.square || group._sqPaid) return;
+    group._sqPaid = true;
+    // locate the 2×2(s) inside the group — it may be merged with straight runs
+    const sq = new Set();
+    for (const cl of group.cells) {
+      const quad = [[cl.r, cl.c], [cl.r, cl.c + 1], [cl.r + 1, cl.c], [cl.r + 1, cl.c + 1]];
+      if (quad.every(([r, c]) => group.cellSet.has(K(r, c)))) quad.forEach(([r, c]) => sq.add(K(r, c)));
+    }
+    let extra = 0;
+    for (const k of sq) {
+      const [r, c] = k.split(',').map(Number);
+      const t = g.board[r][c];
+      if (!t) continue;
+      extra += 1 + (g.mods.boosts[t.color] || 0) + (t.special ? g.mods.specialScore : 0);
+    }
+    if (extra) api.addBonus(extra * (CONFIG.SQUARE_BONUS_MULTIPLIER - 1));
+  },
+});
 
 // v6 Blast radius: only offered once something in the build MAKES bombs
 // (Bomb chance / Square bomb / Bomb trail) — a bigger boom needs a bomb
@@ -496,7 +598,7 @@ const POWERUP_BATCHES = {
   2: ['fillup', 'spawner', 'converter', 'spawnweight', 'purge', 'blast',
       'autoexplode', 'specialscore', 'rowclear', 'colclear', 'matryoshka',
       'aftershock', 'fusionmove', 'pinata', 'tripletile', 'chests', 'conveyor',
-      'chomper', 'squarescore', 'squarebomb', 'gourmet', 'babychomper'],
+      'chomper', 'squarescore', 'squarebomb', 'gourmet', 'buffet', 'babychomper'],
   3: ['sweep', 'lava', 'twinchomper', 'doublebite', 'spicytrail', 'bombtrail'],
 };
 
@@ -612,7 +714,9 @@ class PersistentGame extends Game {
     this.marks = new Set();
     this.drip = { pinata: 0, chest: 0, triple: 0 }; // dry-move pity counters
     this.pendingChests = 0;      // chests queued to ride in on the next refill
-    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; // cap telemetry, per segment
+    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; // cap/food telemetry, per segment
+    this.segBlockers = { box: 0, water: 0, safe: 0 };
+    this.foodCells = new Set();
     this.runMods = [];           // board-granted run modifiers, snapshotted per run
     this.bossRun = false;
     this.runReward = null;       // {dice, bossCleared, worldAdvanced} for the end screen
@@ -695,7 +799,7 @@ class PersistentGame extends Game {
     }
     if (!cell) return;
     const t = this.board[cell.r] && this.board[cell.r][cell.c];
-    if (!t || t.chest || t.chomper) { // indestructible target — keep the item
+    if (!t || t.chest || t.chomper || t.blocker) { // indestructible / blocker target — keep the item
       if (t) { t.wiggle = true; this.render(); setTimeout(() => { delete t.wiggle; this.render(); }, 380); }
       this.render();
       return;
@@ -713,21 +817,8 @@ class PersistentGame extends Game {
     this.render();
   }
 
-  // "Opening act" modifier: the run's first scoring step pays double.
-  processStep(groups, swapCells, seeds, boardClears) {
-    const before = this.score;
-    const res = super.processStep(groups, swapCells, seeds, boardClears);
-    if (this.first2x && res.cnt) {
-      this.first2x = false;
-      const gained = this.score - before;
-      if (gained > 0) {
-        this.score += gained;
-        res.pts += gained;
-        this.callout(`✨ First match ×2! +${gained}`);
-      }
-    }
-    return res;
-  }
+  // ("Opening act" first-match ×2 lives in the processStep override below,
+  // merged with the blocker step effects — a class can only define it once.)
 
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
   computeMods() {
@@ -802,18 +893,22 @@ class PersistentGame extends Game {
   // Shared pickOffer calls startLevel after every pick — the variant
   // dispatcher. Every pick (the first included) mutates the LIVE board;
   // no regeneration, ever.
-  startLevel() {
+  async startLevel() {
     if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
-    this.growBoard();
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
     const def = POWERUPS[pick.id];
     if (def.onLevelStart) def.onLevelStart(this, pick); // spawn-once hooks (chomper family)
+    if (pick.id === 'chomper') this.seedChomperFood();  // v9: his snacks arrive with him
     // One move can cross several checkpoints at once — settle every owed draft.
     this.run.pendingDrafts = Math.max(0, this.run.pendingDrafts - 1);
     if (this.run.pendingDrafts > 0) { this.startDraft(); return; }
-    if (!this.findAnyMove()) this.reshuffleBoard();
     this.phase = 'level';
+    this.busy = true;
+    this.render();
+    await this.growBoardAnimated(); // no-op unless Expand is owed
+    if (!this.findAnyMove()) this.reshuffleBoard();
+    this.checkLevelEnd(); // expansion cascades can score across a checkpoint
     this.busy = false;
     this.render();
   }
@@ -827,7 +922,7 @@ class PersistentGame extends Game {
     // board modifiers adjust the opening pool (landmark laps +, boss cold start −)
     const startMoves = CONFIG.WORLD_START_MOVES[Math.min(META.state.world, CONFIG.WORLD_START_MOVES.length) - 1];
     this.movesLeft = Math.max(1, startMoves + this.runModStartMoves());
-    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0;
+    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; this.segBlockers = { box: 0, water: 0, safe: 0 };
     this.lastWarnedMoves = null;
     this.score = 0;
     this.segStartScore = 0;  // telemetry: score at the current segment's start
@@ -837,6 +932,7 @@ class PersistentGame extends Game {
     this.genBoard();
     this.marks = new Set();
     this.pinatas = new Map(); this.triples = new Set(); this.tripleArmed = false;
+    this.foodCells = new Set(); // cell layer, like marks — foodTarget() kept stocked
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
@@ -849,24 +945,131 @@ class PersistentGame extends Game {
     this.render();
   }
 
-  // Expand picks grow the live board: rows append at the BOTTOM, columns at
-  // the RIGHT, so existing cell keys (marks/piñatas/triples) stay valid.
-  // New tiles roll match-avoiding colours, so growth never fires a free cascade.
-  growBoard() {
+  // v9 Expand payoff moment: rows append at the BOTTOM, columns at the RIGHT
+  // (cell keys for marks/piñatas/triples stay valid) — but the new cells stay
+  // EMPTY, so gravity visibly pulls the existing pieces outward into the gap
+  // and fresh tiles rain in from above. Natural fill means the growth can
+  // land matches and cascade — the board growing IS the reward.
+  async growBoardAnimated() {
     const wantRows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     const wantCols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
-    while (this.rows < wantRows) {
-      this.board.push(Array(this.cols).fill(null));
-      this.rows++;
-      const r = this.rows - 1;
-      for (let c = 0; c < this.cols; c++) this.board[r][c] = this.makeTile(this.rollColorAvoidingMatches(r, c), true);
+    if (this.rows >= wantRows && this.cols >= wantCols) return;
+    while (this.rows < wantRows) { this.board.push(Array(this.cols).fill(null)); this.rows++; }
+    while (this.cols < wantCols) { this.cols++; for (let r = 0; r < this.rows; r++) this.board[r].push(null); }
+    this.callout('📏 The board grows!');
+    this.doShake(8);
+    this.render(); await this.sleep(380); // let the bigger frame and the gap read
+    await this.dropAndFill();             // pieces shift outward, new tiles fall in
+    await this.resolveBoard(null);        // growth cascades are allowed — payoff
+  }
+
+  /* --------------------------- Chomper food ------------------------------
+     Food lives on the CELL layer, exactly like xtra-move marks: it sits
+     BEHIND pieces (foodCells: key -> respawns left), pieces on it match and
+     clear normally, and it never moves. Unlike marks/piñatas/triples, food
+     cells are NOT walls — Chomper walks onto them and eats the snack
+     (+CHOMPER_FOOD_BONUS). foodTarget() snacks are ALWAYS on the board while
+     Chomper is in the build: every eaten one is replaced the same move. */
+  foodTarget() {
+    return this.mods.chomper ? CONFIG.CHOMPER_FOOD_COUNT + (this.mods.foodBonusTiles || 0) : 0;
+  }
+
+  topUpFood() {
+    let guard = 0;
+    while (this.foodCells.size < this.foodTarget() && guard++ < 20) {
+      if (!this.spawnFoodRandom()) break;
     }
-    while (this.cols < wantCols) {
-      this.cols++;
-      for (let r = 0; r < this.rows; r++) this.board[r].push(null);
-      const c = this.cols - 1;
-      for (let r = 0; r < this.rows; r++) this.board[r][c] = this.makeTile(this.rollColorAvoidingMatches(r, c), true);
+  }
+
+  foodCellOk(r, c) {
+    if (r <= 0 || r >= this.rows - 1 || c <= 0 || c >= this.cols - 1) return false; // interior only
+    const k = K(r, c);
+    if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) return false;
+    const t = this.board[r][c];
+    return !!t && !t.special && !this.protectedTile(t); // not on specials or indestructibles (chest/Chomper block his step)
+  }
+
+  spawnFoodAt(r, c) {
+    this.foodCells.add(K(r, c));
+    this.addFx(r, c, '🍖', 'emoji');
+  }
+
+  spawnFoodRandom() {
+    let guard = 0;
+    while (guard++ < 300) {
+      const r = 1 + Math.floor(this.rng() * (this.rows - 2)), c = 1 + Math.floor(this.rng() * (this.cols - 2));
+      if (!this.foodCellOk(r, c)) continue;
+      this.spawnFoodAt(r, c);
+      return true;
     }
+    return false;
+  }
+
+  seedChomperFood() {
+    // first snack lands close to him (2..CHOMPER_FOOD_SPAWN_DISTANCE away,
+    // never adjacent) so the secret movement rule has something to reveal
+    let ch = null;
+    for (let r = 0; r < this.rows && !ch; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].chomper) { ch = { r, c }; break; }
+    let placed = 0;
+    if (ch) {
+      const near = [];
+      for (let r = 1; r < this.rows - 1; r++) for (let c = 1; c < this.cols - 1; c++) {
+        const d = Math.abs(r - ch.r) + Math.abs(c - ch.c);
+        if (d >= 2 && d <= CONFIG.CHOMPER_FOOD_SPAWN_DISTANCE && this.foodCellOk(r, c)) near.push({ r, c });
+      }
+      if (near.length) {
+        const p = near[Math.floor(this.rng() * near.length)];
+        this.spawnFoodAt(p.r, p.c);
+        placed++;
+      }
+    }
+    this.topUpFood(); // fill the rest of the table
+  }
+
+  // v10 Chomper timing: he resolves FIRST — his step happens right after
+  // the swap lands, before matches clear or gravity runs, so aiming him at
+  // a snack can't be spoiled by the board churning under him. His own
+  // trailing board-settle is suppressed here; the outer resolveBoard then
+  // resolves everything WITH swapCells, keeping the player's match ACTIVE
+  // (sweep/snowball/momentum/mark-refund semantics intact).
+  async resolveBoard(swapCells) {
+    if (this._suppressResolve) return; // chomper's internal settle — the outer call covers it
+    if (swapCells && this.mods.chomper && this.phase === 'level') {
+      this._suppressResolve = true;
+      try { await this.chomperStepAndEat(); } finally { this._suppressResolve = false; }
+      this._chomperStepped = true; // endOfMove must not step him twice
+    }
+    await super.resolveBoard(swapCells);
+  }
+
+  // Shared endOfMove hook — skip when he already pre-stepped this move
+  // (merge moves and board effects still reach here and step him normally).
+  async chomperMove() {
+    if (this._chomperStepped) { this._chomperStepped = false; return; }
+    await this.chomperStepAndEat();
+  }
+
+  // Eat on arrival: after his step, any Chomper standing on a food cell
+  // consumes it (cell marks never move, so position is the identity); the
+  // table is restocked the same move — CHOMPER_FOOD_COUNT (+Buffet) always.
+  async chomperStepAndEat() {
+    await super.chomperMove();
+    if (!this.foodCells.size) return;
+    let ate = false;
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+      const t = this.board[r][c];
+      if (!t || !t.chomper) continue;
+      const k = K(r, c);
+      if (!this.foodCells.has(k)) continue;
+      this.foodCells.delete(k);
+      this.score += CONFIG.CHOMPER_FOOD_BONUS;
+      this.segFood = (this.segFood || 0) + 1;
+      this.addFx(r, c, `🍖 +${CONFIG.CHOMPER_FOOD_BONUS}`, 'big');
+      this.callout('😬 nom!');
+      ate = true;
+    }
+    if (ate) { this.topUpFood(); this.render(); }
   }
 
   continueRun() {
@@ -877,9 +1080,16 @@ class PersistentGame extends Game {
   // Engine trySwap calls this once per resolved player move — drip spawns
   // ride the move tail so cheats/board effects never advance the economy.
   async endOfMove() {
+    const hadWater = this.waterCount() > 0;
+    this.waterClearedThisMove = false;
     await super.endOfMove();
     if (this.phase === 'level') {
+      // all the move's water removals are done — bonus if the board is dry now
+      if (hadWater && this.waterClearedThisMove && this.waterCount() === 0) this.waterAllClearBonus();
+      // spread AFTER the move and its cascades fully resolve
+      if (this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
       this.dripRolls();
+      this.topUpFood(); // the table never runs low (no-op without Chomper)
       if (this.movesLeft <= 3) this.segDanger++; // moves played under the gun (cap-tuning telemetry)
     }
   }
@@ -950,13 +1160,15 @@ class PersistentGame extends Game {
       // moves played at ≤3 left — see handover §telemetry for the tuning rule
       peakBank: this.segPeak, clipped: this.segClipped, dangerMoves: this.segDanger,
       snowBonus: this.run.snowBonus, // v8: snowball payout level at segment end
-      world: META.state.world, boss: !!this.bossRun, // v9 board meta context
+      world: META.state.world, boss: !!this.bossRun, // board meta context
       runMods: this.runMods.map(m => m.id),
+      foodEaten: this.segFood || 0,  // chomper snacks eaten this segment
+      blockers: { ...this.segBlockers }, // boxes broken / water removed / safes opened
       fast: !!this.fast, // bot/test runs — excluded from human summaries
     });
     this.segStartScore = this.score;
     this.movesUsed = 0; this.moveScores = [];
-    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0;
+    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; this.segBlockers = { box: 0, water: 0, safe: 0 };
   }
 
   // v8 snowball bar: charge units from either charger pick; each full bar
@@ -993,13 +1205,205 @@ class PersistentGame extends Game {
     if (this.mods.spicyTrail && t && t.volatile) t.volatile = Infinity;
   }
 
-  // Queued drip chests ride in as the topmost refill tile of a column.
+  // Queued drip chests ride in as the topmost refill tile of a column;
+  // unlocked blockers roll for each remaining refill slot (v10).
   makeRefillTile(r, c) {
     if (r === 0 && this.pendingChests > 0) {
       this.pendingChests--;
       return { id: this.tileId++, color: -1, chest: true, special: null, dir: null, countdown: null };
     }
+    const b = this.rollBlockerTile();
+    if (b) return b;
     return super.makeRefillTile(r, c);
+  }
+
+  /* ------------------------------ Blockers -------------------------------
+     Inert tiles cleared only via their own interaction. Protected from all
+     clears/transforms, unswappable, walls for Chomper; they ride gravity. */
+  protectedTile(t) { return super.protectedTile(t) || !!(t && t.blocker); }
+  immovableTile(t) { return super.immovableTile(t) || !!(t && t.blocker); }
+  gravityFixed(t) { return !!(t && t.blocker); } // blockers hang in place; holes persist beneath them
+
+  blockerCount(type) {
+    let n = 0;
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].blocker === type) n++;
+    return n;
+  }
+
+  rollBlockerTile() {
+    for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
+      if (this.blockerCount(type) >= def.cap()) continue;
+      if (this.rng() < def.chance())
+        return { id: this.tileId++, color: -4, blocker: type, ...def.make(),
+                 special: null, dir: null, countdown: null, fresh: true };
+    }
+    return null;
+  }
+
+  // Match-time blocker effects, same timing as other match effects: the
+  // shared processStep stamps group.active, then this runs. Boxes and safes
+  // count PLAYER matches only; water is removed by any match (cascades too),
+  // and removing a water chain-removes the connected puddle.
+  processStep(groups, swapCells, seeds, boardClears = []) {
+    const before = this.score; // for the "Opening act" board modifier below
+    const res = super.processStep(groups, swapCells, seeds, boardClears);
+    if (groups.length) this.blockerMatchEffects(groups);
+    this.blockerExplosionEffects(res);
+    // "Opening act" board modifier: the run's first scoring step pays double.
+    if (this.first2x && res.cnt) {
+      this.first2x = false;
+      const gained = this.score - before;
+      if (gained > 0) {
+        this.score += gained;
+        res.pts += gained;
+        this.callout(`✨ First match ×2! +${gained}`);
+      }
+    }
+    return res;
+  }
+
+  // Special-piece explosions AFFECT blockers (they still aren't cleared by
+  // them): a blast covering a box deals 1 hit, water in the blast is removed
+  // (chain rule applies), and a safe lights the exploding special's colour.
+  // Runs before applyStep, so exploding specials are still on the board.
+  blockerExplosionEffects(res) {
+    const hit = new Set(); // one effect per blocker per step
+    for (const { r, c, explosion } of res.cleared.values()) {
+      const t = this.board[r][c];
+      if (!t || !t.special) continue; // every cleared special explodes (invariant)
+      for (const cl of this.explosionCells(r, c, t)) {
+        const b = this.board[cl.r][cl.c];
+        if (!b || !b.blocker || hit.has(b.id)) continue;
+        hit.add(b.id);
+        if (b.blocker === 'water') this.removeWaterChain(cl.r, cl.c);
+        else if (b.blocker === 'box') this.damageBox(cl.r, cl.c, b);
+        else if (b.blocker === 'safe') this.lightSafe(cl.r, cl.c, b, t.color);
+      }
+    }
+  }
+
+  blockerNeighbors(group) {
+    const seen = new Set(), out = [];
+    for (const cl of group.cells) for (const [dr, dc] of DIRS4) {
+      const r = cl.r + dr, c = cl.c + dc, k = K(r, c);
+      if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
+      seen.add(k);
+      const t = this.board[r][c];
+      if (t && t.blocker) out.push({ r, c, t });
+    }
+    return out;
+  }
+
+  blockerMatchEffects(groups) {
+    for (const g of groups) {
+      const hitOnce = new Set(); // one box hit / safe light per group
+      for (const { r, c, t } of this.blockerNeighbors(g)) {
+        if (t.blocker === 'water') { // any match frees water, cascades included
+          this.removeWaterChain(r, c);
+          continue;
+        }
+        if (!g.active || hitOnce.has(t.id)) continue; // boxes/safes: player matches only
+        hitOnce.add(t.id);
+        if (t.blocker === 'box') this.damageBox(r, c, t);
+        else if (t.blocker === 'safe') this.lightSafe(r, c, t, g.color);
+      }
+    }
+  }
+
+  damageBox(r, c, t) {
+    t.hits--;
+    this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
+    this.doShake(4);
+    if (t.hits <= 0) { // breaks open: a bomb sits where the box was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'bomb', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.box++;
+      this.callout('📦 Box cracked — bomb inside!');
+    }
+  }
+
+  lightSafe(r, c, t, color) {
+    if (color === undefined || color === null || color < 0 || t.lit.includes(color)) return;
+    t.lit.push(color);
+    this.addFx(r, c, '🔓', 'emoji');
+    const need = Math.min(CONFIG.BLOCKER_COLOR_SAFE_COLORS_REQUIRED, this.opts.colours);
+    if (t.lit.length >= need) { // opens: a lightning sits where the safe was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'lightning', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.safe++;
+      this.callout('🔓 Safe opened — lightning inside!');
+      this.doShake(8);
+      this.addWave(r, c, 4, 0);
+    }
+  }
+
+  // Water removal chain-clears the orthogonally connected puddle. 0 points.
+  // Emptying the board of water in one move pays 2 random special pieces.
+  removeWaterChain(r, c) {
+    const stack = [[r, c]];
+    while (stack.length) {
+      const [rr, cc] = stack.pop();
+      const t = this.board[rr] && this.board[rr][cc];
+      if (!t || t.blocker !== 'water') continue;
+      this.board[rr][cc] = this.makeTile(this.rollRefillColor());
+      this.board[rr][cc].fresh = true;
+      this.segBlockers.water++;
+      this.addFx(rr, cc, '💧', 'emoji');
+      for (const [dr, dc] of DIRS4) stack.push([rr + dr, cc + dc]);
+    }
+    this.waterClearedThisMove = true;
+  }
+
+  waterCount() { return this.blockerCount('water'); }
+
+  // Spread: after the move fully resolves (cascades included) each water
+  // tile claims one random valid orthogonal neighbour — never specials,
+  // chests, Chomper, other blockers, or cells carrying food/marks/piñatas/
+  // triples. A puddle with nowhere to go sits still that move.
+  waterSpread() {
+    const waters = [];
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].blocker === 'water') waters.push({ r, c });
+    let spread = false;
+    for (const w of waters) {
+      const cands = [];
+      for (const [dr, dc] of DIRS4) {
+        const r = w.r + dr, c = w.c + dc, k = K(r, c);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) continue;
+        if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) continue;
+        const t = this.board[r][c];
+        if (!t || t.special || this.protectedTile(t)) continue; // normal coloured tiles only
+        cands.push({ r, c });
+      }
+      if (!cands.length) continue;
+      const p = cands[Math.floor(this.rng() * cands.length)];
+      const nw = { id: this.tileId++, color: -4, blocker: 'water', special: null, dir: null, countdown: null, fresh: true, ripple: true };
+      this.board[p.r][p.c] = nw;
+      setTimeout(() => { delete nw.ripple; this.render(); }, 700);
+      spread = true;
+    }
+    if (spread) { this.render(); this.doShake(3); }
+  }
+
+  // All-clear bonus: 2 random special pieces on random interior normal tiles.
+  waterAllClearBonus() {
+    this.callout('🌊 Water cleared — bonus specials!');
+    let placed = 0, guard = 0;
+    while (placed < CONFIG.BLOCKER_WATER_BONUS_SPECIALS && guard++ < 300) {
+      const r = 1 + Math.floor(this.rng() * (this.rows - 2)), c = 1 + Math.floor(this.rng() * (this.cols - 2));
+      const t = this.board[r][c];
+      if (!t || t.special || this.protectedTile(t)) continue;
+      const type = ['bomb', 'arrow', 'lightning'][Math.floor(this.rng() * 3)];
+      this.board[r][c] = { id: this.tileId++, color: t.color, special: type,
+                           dir: type === 'arrow' ? (this.rng() < 0.5 ? 'h' : 'v') : null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.addFx(r, c, '✨', 'emoji');
+      placed++;
+    }
   }
 
   /* --------------------------- Per-move drip -----------------------------
@@ -1041,6 +1445,7 @@ class PersistentGame extends Game {
     else if (pick.id === 'pinata') this.spawnPinata();
     else if (pick.id === 'tripletile') this.spawnTriple();
     else if (pick.id === 'chests') this.pendingChests++;
+    else if (pick.id === 'buffet') this.topUpFood(); // extra snacks land instantly
   }
 
   spawnMark() {
@@ -1051,6 +1456,7 @@ class PersistentGame extends Game {
       if ((r === 0 || r === this.rows - 1) && (c === 0 || c === this.cols - 1)) continue;
       const k = K(r, c);
       if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) continue;
+      if (this.foodCells.has(k)) continue; // marked cells would wall Chomper off his snacks
       this.marks.add(k);
       this.addFx(r, c, '🔄', 'emoji');
       return true;
@@ -1613,7 +2019,7 @@ function Board({ G }) {
     // the back aligns with the piece's body, not its upper face (CD)
     const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
-      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
+      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '') + (G.foodCells.has(cellKey) ? ' foodc' : '')}
       style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
@@ -1635,6 +2041,7 @@ function Board({ G }) {
     const pieceSlot = 'piece.' + SKIN.PIECE_SLOTS[t.color];
     const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
       : t.chest ? slotImg('tile.chest', 'piece-img')
+      : t.blocker ? slotImg('tile.blocker.' + t.blocker, 'piece-img') // v10 art slots; CSS+emoji fallback below
       : ((G.mods.boosts[t.color] || 0) > 0 && slotImg(pieceSlot + '.boosted', 'piece-img'))
         || slotImg(pieceSlot, 'piece-img');
     const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
@@ -1642,11 +2049,17 @@ function Board({ G }) {
     // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
     tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : t.blocker ? 'blocker ' + t.blocker + (t.blocker === 'box' ? ' hits' + Math.max(1, t.hits) : '') + (t.ripple ? ' ripple' : '') : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
         ${art}
         ${spArt}
         ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
+        ${!art && t.blocker === 'box' ? h`<span className="spe">📦</span>` : null}
+        ${!art && t.blocker === 'water' ? h`<span className="spe">💧</span>` : null}
+        ${!art && t.blocker === 'safe' ? h`<span className="spe">🔒</span>` : null}
+        ${t.blocker === 'box' ? h`<span className="cd">${Math.max(0, t.hits)}</span>` : null}
+        ${t.blocker === 'safe' ? h`<span className="safeslots">${Array.from({ length: G.opts.colours }, (_, i) =>
+          h`<span key=${i} className=${'safeslot bgdot' + i + (t.lit.includes(i) ? ' lit' : '')}></span>`)}</span>` : null}
         ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
         ${!spArt && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
@@ -1675,6 +2088,11 @@ function Board({ G }) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
       style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
+  }
+  for (const k of G.foodCells) {
+    const [r, c] = k.split(',').map(Number);
+    cellmarks.push(h`<div key=${'fd' + k} className="cellmark food"
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.food', 'mark-img') || '🍖'}</div>`);
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
