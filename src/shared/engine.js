@@ -119,6 +119,10 @@ class Game {
   // Seam for variants: tiles the player can never swap. Base: chomper only.
   immovableTile(t) { return !!(t && t.chomper); }
 
+  // Seam for variants: called when a protected tile stops Chomper's step
+  // (the blocker's cell + tile). Base: nothing happens — he just stays put.
+  onChomperBlocked(r, c, t) {}
+
   // Seam for variants: tiles gravity never moves — they hang in place, tiles
   // above them stack on top, and slots beneath them stay EMPTY (refills only
   // enter a column from the top). Base: none.
@@ -992,7 +996,7 @@ class Game {
         const k = K(nr, nc);
         if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) break;
         const prey = this.board[nr][nc];
-        if (prey && this.protectedTile(prey)) break; // he can't eat protected pieces
+        if (prey && this.protectedTile(prey)) { this.onChomperBlocked(nr, nc, prey); break; } // he can't eat protected pieces
         s.t.chomp = true;
         const tile = s.t;
         setTimeout(() => { delete tile.chomp; this.render(); }, 500);

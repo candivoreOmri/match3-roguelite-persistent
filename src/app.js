@@ -892,6 +892,22 @@ class PersistentGame extends Game {
     }
   }
 
+  // Chomper can't pass through blockers — but the ATTEMPT counts as a hit:
+  // a bumped box takes 1 damage, bumped water is removed (chain rule), and a
+  // bumped safe lights one random UNLIT colour. Chests and other chompers
+  // still block silently, as before.
+  onChomperBlocked(r, c, t) {
+    if (!t.blocker) return;
+    this.doShake(3);
+    if (t.blocker === 'water') this.removeWaterChain(r, c);
+    else if (t.blocker === 'box') this.damageBox(r, c, t);
+    else if (t.blocker === 'safe') {
+      const unlit = [];
+      for (let i = 0; i < this.opts.colours; i++) if (!t.lit.includes(i)) unlit.push(i);
+      if (unlit.length) this.lightSafe(r, c, t, unlit[Math.floor(this.rng() * unlit.length)]);
+    }
+  }
+
   damageBox(r, c, t) {
     t.hits--;
     this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
