@@ -619,6 +619,7 @@ const META = {
       consumables: { hammer: 0, bomb: 0, shuffle: 0 },
       modifiers: [],                 // active run modifiers [{id}], expire after one run
       bossDefeated: [],              // world ids whose boss run has been cleared
+      boardSpeed: 1,                 // board animation speed ×1/×2/×3 (dice + token)
     };
     try {
       const saved = JSON.parse(localStorage.getItem(META_KEY));
@@ -1772,8 +1773,9 @@ function BossOfferPanel({ world, onFight, onFlee }) {
   </div></div>`;
 }
 
-/* ----- The loop itself: 20 spaces + token, positioned around a circle */
-function BoardLoop({ pos, hopKey, moving }) {
+/* ----- The loop itself: 20 spaces + token, positioned around a circle.
+   hopMs scales the token's glide + bounce with the ×1/×2/×3 speed toggle. */
+function BoardLoop({ pos, hopKey, moving, hopMs }) {
   const world = META.world();
   const spaces = world.spaces.map((type, i) => {
     const t = SPACE_TYPES[type];
@@ -1785,11 +1787,13 @@ function BoardLoop({ pos, hopKey, moving }) {
     </div>`;
   });
   const { x, y } = spaceXY(pos);
+  const ease = 'cubic-bezier(.3,.7,.35,1.1)';
   return h`<div className="bloop">
     <div className="bring"></div>
     ${spaces}
-    <div className=${'btoken' + (moving ? ' moving' : '')} style=${{ left: x + '%', top: y + '%' }}>
-      <div key=${hopKey} className="btoken-in">🧗</div>
+    <div className=${'btoken' + (moving ? ' moving' : '')}
+      style=${{ left: x + '%', top: y + '%', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
+      <div key=${hopKey} className="btoken-in" style=${{ animationDuration: hopMs + 'ms' }}>🧗</div>
     </div>
   </div>`;
 }
@@ -1808,6 +1812,15 @@ function BoardScreen({ G }) {
   React.useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const later = (fn, ms) => timers.current.push(setTimeout(fn, ms));
   const busy = ui.mode !== 'idle';
+  // ×1/×2/×3 board animation speed (dice tumble + token hops) — persisted,
+  // read live so mid-move toggles apply to the remaining steps.
+  const speed = () => S.boardSpeed || 1;
+  const spd = ms => Math.max(40, Math.round(ms / speed()));
+  const cycleSpeed = () => {
+    S.boardSpeed = speed() >= 3 ? 1 : speed() + 1;
+    META.save();
+    G.render();
+  };
 
   const note = (text, cls = '') => {
     const id = noteId.current++;
@@ -1831,9 +1844,9 @@ function BoardScreen({ G }) {
       if (++ticks >= 6) {
         clearInterval(spin);
         setFace(result);
-        later(() => move(result), 240);
+        later(() => move(result), spd(240));
       }
-    }, 55);
+    }, spd(55));
     timers.current.push(spin); // clearTimeout on an interval id is a no-op-safe clear in browsers
   };
 
@@ -1852,10 +1865,10 @@ function BoardScreen({ G }) {
       META.save();
       setHopKey(k => k + 1);
       G.render();
-      if (step < n) later(hop, 270);
-      else later(() => landOn(S.pos), 380);
+      if (step < n) later(hop, spd(270));
+      else later(() => landOn(S.pos), spd(380));
     };
-    later(hop, 200);
+    later(hop, spd(200));
   };
 
   // Land on a space: instant rewards are applied HERE, exactly once — the
@@ -1908,10 +1921,12 @@ function BoardScreen({ G }) {
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <${RunModChips} mods=${S.modifiers} label="Next run:" />
     <div className="bboard">
-      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} />
+      <button className="bspeed" title="Board animation speed" onClick=${cycleSpeed}>⏩ ×${speed()}</button>
+      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
       <div className="bhub">
         <div className="bdice-count">🎲 <b>${S.dice}</b></div>
-        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '')}>${face}</div>
+        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '')}
+          style=${ui.mode === 'rolling' ? { animationDuration: spd(280) + 'ms' } : null}>${face}</div>
         <button className="primary broll" disabled=${busy || S.dice <= 0} onClick=${roll}>
           ${S.dice > 0 ? 'Roll 🎲' : 'No dice'}
         </button>
