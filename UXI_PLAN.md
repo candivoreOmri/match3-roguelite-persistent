@@ -11,22 +11,22 @@ the CD (2026-08-31):
 - **Skin system:** ported from match-quest (`claudeTest/Metagame2_slice/skin.js`
   + `skin.json` manifest + `styleguide.html` + placeholder ledger) so CD art
   drops into named slots with img → tint → emoji fallbacks.
-- **Direction:** *casual-but-distinct* — same stylized toy-3D casual family as
-  match-quest, but Ascent's mountain/climb theme drives its own palette and
-  chrome. Claude proposes the distinct elements; the CD redlines. Claude never
-  invents art — generated placeholders are self-labelling and CD files are
-  never overwritten.
+- **Direction (locked 2026-08-31):** *casual-but-distinct* — toy-3D casual
+  family, themed **mystical cute magic**: purple, gold, pink, white, deeper
+  blues. The CD makes all assets; generated placeholders are self-labelling
+  and CD files are never overwritten.
+- **Fonts (locked 2026-08-31):** **Fruktur** for titles, **Alegreya Sans
+  ExtraBold** for running text. Files in `src/fonts/`; inlined as data URIs
+  by `build.sh` for the gated bundle.
 
 ## 00 · Read me — open questions for the CD
 
-1. **Display font** — reuse Gasoek One (sibling identity with match-quest) or
-   pick a distinct display face for Ascent? Plan assumes Gasoek One until redlined.
-2. **Palette proposal** — night-mountain base (current dark blue-greys kept but
-   deepened toward indigo), alpine-sky accent gradient for progress/CTAs,
-   checkpoint gold for flags/rewards, danger red kept. Redline freely.
-3. **The run bar as the theme carrier** — proposal: the single run-long bar
-   becomes a stylised mountain ascent (trail + checkpoint flags + summit), the
-   one element that makes Ascent read as *itself*. Confirm before Phase A.
+1. ~~Display font~~ — resolved: Fruktur (titles) + Alegreya Sans ExtraBold (running text).
+2. ~~Palette~~ — resolved: mystical cute magic — purple/gold/pink/white/deep
+   blues. Token layer in `styles.css` `:root`; redline any token value freely.
+3. **The run bar as the theme carrier** — proposal, reframed for the theme: the
+   run-long bar becomes a stylised *magical ascent* (enchanted trail, checkpoint
+   flags that plant with a burst, summit/final-flag marker). Confirm before Phase A.
 4. **Menu screen** — keep seed/toggles for playtesting but move them into a
    collapsed dev drawer (match-quest pattern), player-facing start stays clean. OK?
 
@@ -48,10 +48,10 @@ Refs cite folders in `~/Desktop/uxi ref library`.
 
 | # | Build has | Target | Size | Ref |
 | --- | --- | --- | --- | --- |
-| G1 | Bare near-black page, no identity | Themed app shell: full-viewport mountain/ascent backdrop (slot `bg.main`), consistent surface/chrome tokens | M | capybara go, afk journey (world backdrops) |
+| G1 | Bare near-black page, no identity | Themed app shell: full-viewport mystical-magic backdrop (slot `bg.main`), consistent surface/chrome tokens | M | capybara go, afk journey (world backdrops) |
 | G2 | System font everywhere, plain white titles | Display font on titles/CTAs/HUD numbers, white-with-outline title treatment, type scale tokens | S | match masters, brawl stars (HUD type) |
 | G3 | Emoji as every icon (🚩👟🔋🚀❄️🪅🎁😬 + specials ↔️⚡💣) | Every currency/marker/special is an ICON slot; code draws counts beside icons; no emoji in final UI (emoji stay as fallback tier) | M (spread across phases) | monopoly go (currency icons) |
-| G4 | HUD: flat pill, thin 8px bar, tiny ticks | Hero run-bar: mountain-trail bar, flag ticks that plant/celebrate when crossed, summit marker, score readout with display type; moves as a prominent boot/energy counter | L | monopoly go (progress events), match masters |
+| G4 | HUD: flat pill, thin 8px bar, tiny ticks | Hero run-bar: enchanted-trail bar, flag ticks that plant/celebrate when crossed, summit marker, score readout with display type; moves as a prominent boot/energy counter | L | monopoly go (progress events), match masters |
 | G5 | Up to 3 stacked meter rows eating vertical space | Consolidated compact meter cluster (icon + slim bar), consistent with HUD styling | M | clash royale (elixir-style compact meters) |
 | G6 | Tiles: CSS-gradient roundrects on faint grey bgcells | Piece art slots (`piece.0-5`, rendered near-touching, no plates behind skinned pieces), board container/frame slot, tile-well texture | L | match masters (board), disney solitaire |
 | G7 | Specials: emoji overlaid on a colored tile | Dedicated special-piece slots (arrow-h/v, lightning, bomb) rendered AS-IS (never tinted), countdown badge restyled | M | match masters (special pieces) |
@@ -94,7 +94,11 @@ Refs cite folders in `~/Desktop/uxi ref library`.
 
 ## Status
 
-- [ ] Phase 0 — in progress (launch.json + sync.sh done)
+- [x] Phase 0 — done 2026-08-31: skin.js loader + `assets/skin.json` manifest +
+  `assets/styleguide.html` + `placeholders.sha1` ledger; fonts wired (dev
+  @font-face + data-URI inlining in build.sh — **build.sh changed**, flag in
+  PR); `:root` design-token layer + mystical palette applied across styles.css;
+  launch.json + sync.sh dev loop. ASSET_MANIFEST.md holds the slot taxonomy.
 - [ ] Phase A
 - [ ] Phase B
 - [ ] Phase C

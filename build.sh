@@ -26,9 +26,20 @@ trap 'rm -rf "$TMP"' EXIT
   echo '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">'
   echo '<style>'
   cat "$SRC/styles.css"
+  echo '</style>'
+  # fonts: the bundle is a single file, so the dev-relative url(fonts/…) rules
+  # in styles.css can't resolve — append data-URI @font-face rules that win the
+  # cascade (same family+weight declared later overrides the dev rule).
+  echo '<style>'
+  for spec in "Fruktur:Fruktur-Regular.ttf" "Alegreya Sans:AlegreyaSans-ExtraBold.ttf"; do
+    fam="${spec%%:*}"; file="${spec#*:}"
+    printf "@font-face{font-family:'%s';src:url(data:font/ttf;base64," "$fam"
+    openssl base64 -A -in "$SRC/fonts/$file"
+    printf ") format('truetype');font-weight:100 900;}\n"
+  done
   echo '</style></head><body>'
   echo '<div id="root"></div>'
-  for f in "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
+  for f in "$SRC/skin.js" "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
     echo '<script>'
     cat "$f"
     echo '</script>'

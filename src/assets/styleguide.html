@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ascent — living style guide</title>
+<style>
+  @font-face { font-family: 'Fruktur'; src: url(../fonts/Fruktur-Regular.ttf) format('truetype'); font-weight: 100 900; }
+  @font-face { font-family: 'Alegreya Sans'; src: url(../fonts/AlegreyaSans-ExtraBold.ttf) format('truetype'); font-weight: 100 900; }
+  :root {
+    --bg: #171130; --surface: #221a44; --raised: #2b2156; --border: #40336e;
+    --text: #f3eeff; --text-dim: #b3a8d6; --text-faint: #857aab;
+    --accent: #a56bff; --accent-2: #ff7ad9; --gold: #ffd54a; --danger: #ff5a4c;
+    --cta: linear-gradient(135deg, #8b5cf6, #e95fd0);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Alegreya Sans', sans-serif; padding: 24px; }
+  h1 { font-family: 'Fruktur', cursive; font-size: 34px; margin-bottom: 4px;
+       text-shadow: 0 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+  .note { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+  h2 { font-family: 'Fruktur', cursive; font-size: 22px; margin: 28px 0 12px; color: var(--gold); }
+  .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .card { width: 132px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
+  .well { height: 96px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+          background: repeating-conic-gradient(#2b2156 0 25%, #221a44 0 50%) 0 0 / 20px 20px; }
+  .well img { max-width: 90%; max-height: 90%; }
+  .slot { font-size: 11px; color: var(--text-dim); margin-top: 6px; word-break: break-all; font-family: monospace; }
+  .miss { color: var(--danger); font-weight: 800; font-size: 10px; letter-spacing: .08em; }
+  .ok { color: #6ee7a0; font-weight: 800; font-size: 10px; letter-spacing: .08em; }
+  .fall { font-size: 34px; opacity: .45; }
+  .sw { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sw div { width: 132px; height: 64px; border-radius: 10px; display: flex; align-items: flex-end;
+            padding: 6px 8px; font-size: 11px; font-family: monospace; color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,.8); border: 1px solid rgba(255,255,255,.12); }
+  .type-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
+  .type-card .label { font-size: 11px; color: var(--text-faint); font-family: monospace; margin-bottom: 4px; }
+  .disp { font-family: 'Fruktur', cursive; font-size: 30px;
+          text-shadow: 0 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+  .body-lg { font-size: 17px; } .body-sm { font-size: 13px; color: var(--text-dim); }
+  button.cta { font-family: 'Fruktur', cursive; font-size: 18px; color: #fff; border: none; border-radius: 14px;
+               padding: 12px 26px; background: var(--cta); box-shadow: 0 4px 18px rgba(165, 107, 255, .4); cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>Ascent — style guide</h1>
+<p class="note">Living review surface. Slots read live from <code>skin.json</code> — red = missing (emoji/CSS fallback active in game). Refresh after dropping art + updating the manifest.</p>
+
+<h2>Type</h2>
+<div class="type-card"><div class="label">display — Fruktur (titles, CTAs, callouts)</div>
+  <div class="disp">Checkpoint 3 — Draft a Power-Up!</div></div>
+<div class="type-card"><div class="label">body — Alegreya Sans ExtraBold (running text, numbers)</div>
+  <div class="body-lg">One board, one bar. Cross 6 checkpoints — 1234567890</div>
+  <div class="body-sm">Secondary / dim text: piñatas appear as you play, matching over one pays +50 points.</div></div>
+<button class="cta">Start run</button>
+
+<h2>Palette tokens</h2>
+<div class="sw" id="sw"></div>
+
+<h2 id="slots-h">Slots</h2>
+<div id="slots"></div>
+
+<script>
+const TAXONOMY = {
+  'P1 — pieces & specials': [
+    ['piece.red','🟥'],['piece.yellow','🟨'],['piece.green','🟩'],['piece.blue','🟦'],['piece.purple','🟪'],['piece.orange','🟧'],
+    ['special.arrow-h','↔️'],['special.arrow-v','↕️'],['special.lightning','⚡'],['special.bomb','💣'],
+    ['tile.chest','🎁'],['tile.chomper','😬'],
+  ],
+  'P1 — identity': [ ['bg.main','🌌'],['logo','🏔️'],['icon.moves','👟'],['icon.flag','🚩'] ],
+  'P2 — board & meters': [
+    ['marker.xtramove','🔄'],['marker.pinata','🪅'],['marker.triple','✖️'],
+    ['icon.momentum','🚀'],['icon.fillup','🔋'],['icon.snowball','❄️'],
+    ['board.cell','▫️'],['board.cell-alt','◽'],['board.frame','🖼️'],
+  ],
+  'P2 — UI chrome (9-slice)': [
+    ['ui.button-primary','🔲'],['ui.panel','🔲'],['ui.chip','🔲'],
+    ['ui.progressbar-track','▭'],['ui.progressbar-fill','▬'],['ui.overlay-card','🔲'],
+  ],
+};
+const TOKENS = ['--bg','--surface','--raised','--border','--text','--text-dim','--text-faint','--accent','--accent-2','--gold','--danger'];
+
+let slots = {};
+try {
+  const x = new XMLHttpRequest(); x.open('GET','skin.json?cb='+Date.now(),false); x.send(null);
+  if (x.status===200) slots = JSON.parse(x.responseText).slots || {};
+} catch(e) {}
+
+const cs = getComputedStyle(document.documentElement);
+document.getElementById('sw').innerHTML = TOKENS.map(t =>
+  `<div style="background:${cs.getPropertyValue(t)}">${t}<br>${cs.getPropertyValue(t).trim()}</div>`).join('');
+
+document.getElementById('slots').innerHTML = Object.entries(TAXONOMY).map(([wave, list]) =>
+  `<h2>${wave}</h2><div class="grid">` + list.map(([id, fall]) => {
+    const f = slots[id];
+    return `<div class="card"><div class="well">${f ? `<img src="${f}" alt="">` : `<span class="fall">${fall}</span>`}</div>
+      <div class="slot">${id}</div><div class="${f?'ok':'miss'}">${f ? f : 'MISSING'}</div></div>`;
+  }).join('') + '</div>').join('');
+</script>
+</body>
+</html>
