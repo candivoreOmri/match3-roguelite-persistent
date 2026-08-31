@@ -16,6 +16,15 @@ const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
   BALANCE_VERSION: 17, // v17: chomper food + animated expansion + constant snacks + Buffet (on the v16 checkpoint ease)
+
+  // Chomper food: cell-layer snacks only Chomper can consume, paying
+  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
+  // while Chomper is in the build — every eaten snack is replaced at a
+  // random valid interior cell the same move. Buffet adds more (stacks).
+  CHOMPER_FOOD_BONUS: 20,
+  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
+  CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
+  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
