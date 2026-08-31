@@ -848,9 +848,12 @@ function Board({ G }) {
   for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
     const cellKey = K(r, c);
     const cellSlot = ((r + c) % 2) ? 'board.cell-alt' : 'board.cell';
+    // cell backs sit ~10% LOW: the stacked piece art overhangs downward, so
+    // the back aligns with the piece's body, not its upper face (CD)
+    const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
       className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
-      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px',
+      style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
     const t = G.board[r][c];
