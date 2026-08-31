@@ -37,13 +37,16 @@ nothing — flavour text was cut, and the meta offer auto-applies, no
 accept/decline); each lap banks +1 starting move. After
 `LAPS_TO_UNLOCK_BOSS` laps the boss REPLACES the Start-run button (it is
 not a board space) — its negative modifier is announced before the run,
-and clearing it advances the world. Targets AND move grants are per-world
-(`WORLD_CHECKPOINTS`, `WORLD_START_MOVES`, `WORLD_CHECKPOINT_MOVES`) —
-and since v12 a regular run uses only the first `WORLD_RUN_CHECKPOINTS`
-flags of its world's curve (world 1: 3 flags, introductory) while the
-boss always climbs all 6. World N auto-unlocks power-up batch N in the
-draft pool (`POWERUP_BATCHES` — data, wrapped over each roster entry's
-`disabled`; batch listing never resurrects a roster-disabled pick).
+and clearing it advances the world. Targets AND move grants are per-world,
+and since v13 regular and boss runs read SEPARATE curves
+(`WORLD_CHECKPOINTS` / `WORLD_BOSS_CHECKPOINTS`, plus `WORLD_START_MOVES`,
+`WORLD_CHECKPOINT_MOVES`) — a regular run's flag count is its curve's
+length (world 1: 3 flags, introductory; its boss climbs 6). Tuning note:
+the greedy bot harness is a decent proxy at 5 colours but near-useless at
+6 (boss runs) — tune bosses by relative bot progress + human telemetry.
+World N auto-unlocks power-up batch N in the draft pool
+(`POWERUP_BATCHES` — data, wrapped over each roster entry's `disabled`;
+batch listing never resurrects a roster-disabled pick).
 Worlds, space layouts, modifiers, and batches are all data tables in
 `src/app.js` — add space types / worlds / modifiers there, never in the
 engine. Meta state persists in localStorage under `rl_persistent_meta_v1`.

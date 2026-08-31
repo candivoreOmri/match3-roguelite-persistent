@@ -17,7 +17,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 12, // v12: world-1 regular runs = 3 flags (boss keeps 6), consumables usable in-run
+  BALANCE_VERSION: 13, // v13: regular and boss curves decoupled; world-1 retuned (regular was trivial)
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -48,8 +48,26 @@ const CONFIG = {
   // moves): ~50% win rate, 3-11 leftover moves on wins, most losses past
   // checkpoint 3. World 2 ≈ 0.85× the full tuning (batches 1+2 hold most of
   // the score engines); world 3 is the original v3 full-roster curve.
+  // v13: regular and boss runs have SEPARATE curves per world (v12 sliced
+  // the first 3 flags off the boss curve for regular runs — but those were
+  // the gentle onboarding segments of a 6-flag climb, which made regular
+  // world-1 runs trivial, and any early-flag raise instantly bricked the
+  // 6-colour boss opening; one array can't serve both).
+  // A regular run's flag count = its curve's length.
+  // World-1 regular retune (greedy bot, 18 seeds): 39% bot win rate with
+  // 0-6 leftover moves — photo finishes instead of the old 58%-with-13-spare.
   WORLD_CHECKPOINTS: [
-    [35, 85, 165, 280, 435, 635],
+    [45, 110, 220],
+    [68, 213, 442, 765, 1275, 2125],
+    [80, 250, 520, 900, 1500, 2500],
+  ],
+  // Boss curves — always the full climb. NOTE: the bot is a bad proxy at 6
+  // colours (it goes 0/12 even on the curve Omri cruised), so the w1 boss is
+  // tuned by RELATIVE bot progress: this curve pushes the bot's median reach
+  // from flag 3 down to flag 2 vs the "very very easy" v12 curve (~one
+  // notch harder overall, with a heavier tail). Human telemetry decides next.
+  WORLD_BOSS_CHECKPOINTS: [
+    [40, 100, 200, 330, 500, 720],
     [68, 213, 442, 765, 1275, 2125],
     [80, 250, 520, 900, 1500, 2500],
   ],
@@ -67,11 +85,6 @@ const CONFIG = {
     [8, 10, 11, 12, 13],
     [8, 10, 11, 12, 13],
   ],
-  // v12: a REGULAR run only uses the first N flags of its world's curve —
-  // world 1 is introductory (3 flags ≈ 21-move runs); the BOSS always runs
-  // the full curve, so world 1's boss is twice the climb (Omri: the first
-  // boss was far too easy).
-  WORLD_RUN_CHECKPOINTS: [3, 6, 6],
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -767,15 +780,14 @@ class PersistentGame extends Game {
     this.startDraft();
   }
 
-  // Checkpoint values: the current world's curve, colour-scaled (cumulative
-  // run score, not per-segment). Regular runs use only the first
-  // WORLD_RUN_CHECKPOINTS flags; boss runs always climb the full curve.
-  // The world can't change mid-run, so a live read is safe.
+  // Checkpoint values, colour-scaled (cumulative run score, not per-segment).
+  // Regular and boss runs read separate per-world curves (v13) — a regular
+  // run's flag count is just its curve's length. The world can't change
+  // mid-run, so a live read is safe.
   checkpoints() {
     const s = CONFIG.COLOUR_TARGET_SCALE[this.opts.colours] || 1;
-    const w = Math.min(META.state.world, CONFIG.WORLD_CHECKPOINTS.length) - 1;
-    let base = CONFIG.WORLD_CHECKPOINTS[w];
-    if (!this.bossRun) base = base.slice(0, CONFIG.WORLD_RUN_CHECKPOINTS[w] || base.length);
+    const table = this.bossRun ? CONFIG.WORLD_BOSS_CHECKPOINTS : CONFIG.WORLD_CHECKPOINTS;
+    const base = table[Math.min(META.state.world, table.length) - 1];
     return base.map(v => Math.round(v * s));
   }
 
