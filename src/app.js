@@ -35,12 +35,14 @@ const CONFIG = {
   BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
   BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
 
-  // Chomper food: inert snack tiles only Chomper can consume. Each pays
-  // CHOMPER_FOOD_BONUS on the spot, respawns once at a random interior cell,
-  // then is gone for good after its second eating.
+  // Chomper food: cell-layer snacks only Chomper can consume, paying
+  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
+  // while Chomper is in the build — every eaten snack is replaced at a
+  // random valid interior cell the same move. Buffet adds more (stacks).
   CHOMPER_FOOD_BONUS: 20,
-  CHOMPER_FOOD_COUNT: 2,           // foods seeded when Chomper is drafted
+  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
   CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
+  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -344,6 +346,14 @@ POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is bui
 // movement steering stays SECRET, never hint at it).
 POWERUPS.chomper.desc = () => `A hungry critter roams the board — after each move you make it eats one piece at full value (specials detonate; 🍖 snacks pay +${CONFIG.CHOMPER_FOOD_BONUS})`;
 
+// Buffet: more snacks on the table (chomper-family upgrade, stackable).
+POWERUPS.buffet = {
+  id: 'buffet', name: 'Buffet', icon: '🍱', cluster: 'utility', stackable: true, tier: 2, requiresChomper: true,
+  desc: () => `${CONFIG.CHOMPER_BUFFET_TILES} more 🍖 snacks stay on the board for Chomper (stacks)`,
+  mods(m) { m.foodBonusTiles = (m.foodBonusTiles || 0) + CONFIG.CHOMPER_BUFFET_TILES; },
+};
+POWERUP_LIST.push(POWERUPS.buffet);
+
 // v7 Spicy Trail: scorch PERSISTS until matched (shared engine gives it a
 // 1-move expiry, which made triggering it nearly impossible — you'd need a
 // match through one specific fresh tile on the very next move). Chomper now
@@ -410,7 +420,7 @@ class PersistentGame extends Game {
     this.pendingChests = 0;      // chests queued to ride in on the next refill
     this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; // cap/food telemetry, per segment
     this.segBlockers = { box: 0, water: 0, safe: 0 };
-    this.foodCells = new Map();
+    this.foodCells = new Set();
   }
 
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
@@ -502,7 +512,7 @@ class PersistentGame extends Game {
     this.genBoard();
     this.marks = new Set();
     this.pinatas = new Map(); this.triples = new Set(); this.tripleArmed = false;
-    this.foodCells = new Map(); // key -> respawns left (cell layer, like marks)
+    this.foodCells = new Set(); // cell layer, like marks — foodTarget() kept stocked
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
@@ -536,26 +546,38 @@ class PersistentGame extends Game {
      BEHIND pieces (foodCells: key -> respawns left), pieces on it match and
      clear normally, and it never moves. Unlike marks/piñatas/triples, food
      cells are NOT walls — Chomper walks onto them and eats the snack
-     (+CHOMPER_FOOD_BONUS). Each respawns ONCE elsewhere, then is gone. */
+     (+CHOMPER_FOOD_BONUS). foodTarget() snacks are ALWAYS on the board while
+     Chomper is in the build: every eaten one is replaced the same move. */
+  foodTarget() {
+    return this.mods.chomper ? CONFIG.CHOMPER_FOOD_COUNT + (this.mods.foodBonusTiles || 0) : 0;
+  }
+
+  topUpFood() {
+    let guard = 0;
+    while (this.foodCells.size < this.foodTarget() && guard++ < 20) {
+      if (!this.spawnFoodRandom()) break;
+    }
+  }
+
   foodCellOk(r, c) {
     if (r <= 0 || r >= this.rows - 1 || c <= 0 || c >= this.cols - 1) return false; // interior only
     const k = K(r, c);
     if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) return false;
     const t = this.board[r][c];
-    return !!t && !t.special && !t.chomper && !t.chest; // spec: not on a special / Chomper (chest would block his step)
+    return !!t && !t.special && !this.protectedTile(t); // not on specials or indestructibles (chest/Chomper block his step)
   }
 
-  spawnFoodAt(r, c, respawns) {
-    this.foodCells.set(K(r, c), respawns);
+  spawnFoodAt(r, c) {
+    this.foodCells.add(K(r, c));
     this.addFx(r, c, '🍖', 'emoji');
   }
 
-  spawnFoodRandom(respawns) {
+  spawnFoodRandom() {
     let guard = 0;
     while (guard++ < 300) {
       const r = 1 + Math.floor(this.rng() * (this.rows - 2)), c = 1 + Math.floor(this.rng() * (this.cols - 2));
       if (!this.foodCellOk(r, c)) continue;
-      this.spawnFoodAt(r, c, respawns);
+      this.spawnFoodAt(r, c);
       return true;
     }
     return false;
@@ -576,32 +598,33 @@ class PersistentGame extends Game {
       }
       if (near.length) {
         const p = near[Math.floor(this.rng() * near.length)];
-        this.spawnFoodAt(p.r, p.c, 1);
+        this.spawnFoodAt(p.r, p.c);
         placed++;
       }
     }
-    while (placed < CONFIG.CHOMPER_FOOD_COUNT) { if (!this.spawnFoodRandom(1)) break; placed++; }
+    this.topUpFood(); // fill the rest of the table
   }
 
   // Eat on arrival: after his step, any Chomper standing on a food cell
-  // consumes it (cell marks never move, so position is the identity).
+  // consumes it (cell marks never move, so position is the identity); the
+  // table is restocked the same move — CHOMPER_FOOD_COUNT (+Buffet) always.
   async chomperMove() {
     await super.chomperMove();
     if (!this.foodCells.size) return;
+    let ate = false;
     for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
       const t = this.board[r][c];
       if (!t || !t.chomper) continue;
       const k = K(r, c);
       if (!this.foodCells.has(k)) continue;
-      const respawns = this.foodCells.get(k);
       this.foodCells.delete(k);
       this.score += CONFIG.CHOMPER_FOOD_BONUS;
       this.segFood = (this.segFood || 0) + 1;
       this.addFx(r, c, `🍖 +${CONFIG.CHOMPER_FOOD_BONUS}`, 'big');
       this.callout('😬 nom!');
-      if (respawns > 0) this.spawnFoodRandom(respawns - 1); // one respawn, then gone for good
-      this.render();
+      ate = true;
     }
+    if (ate) { this.topUpFood(); this.render(); }
   }
 
   continueRun() {
@@ -621,6 +644,7 @@ class PersistentGame extends Game {
       // spread AFTER the move and its cascades fully resolve
       if (this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
       this.dripRolls();
+      this.topUpFood(); // the table never runs low (no-op without Chomper)
       if (this.movesLeft <= 3) this.segDanger++; // moves played under the gun (cap-tuning telemetry)
     }
   }
@@ -952,6 +976,7 @@ class PersistentGame extends Game {
     else if (pick.id === 'pinata') this.spawnPinata();
     else if (pick.id === 'tripletile') this.spawnTriple();
     else if (pick.id === 'chests') this.pendingChests++;
+    else if (pick.id === 'buffet') this.topUpFood(); // extra snacks land instantly
   }
 
   spawnMark() {
@@ -1273,9 +1298,9 @@ function Board({ G }) {
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
       style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
   }
-  for (const [k, left] of G.foodCells) {
+  for (const k of G.foodCells) {
     const [r, c] = k.split(',').map(Number);
-    cellmarks.push(h`<div key=${'fd' + k} className=${'cellmark food' + (left ? '' : ' last')}
+    cellmarks.push(h`<div key=${'fd' + k} className="cellmark food"
       style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.food', 'mark-img') || '🍖'}</div>`);
   }
   for (const f of G.fx) {

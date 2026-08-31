@@ -628,7 +628,6 @@ button.primary {
   border: 1px solid #ffb35c; color: #ffd9a0; font-size: 13px;
   animation: foodWaft 1.8s ease-in-out infinite;
 }
-.cellmark.food.last { border-style: dashed; opacity: .85; } /* respawn spent — last helping */
 @keyframes foodWaft {
   0%, 100% { transform: translate(-3px,-3px) scale(1); }
   50% { transform: translate(-3px,-3px) scale(1.12); }
