@@ -336,7 +336,8 @@ class PersistentGame extends Game {
     this.marks = new Set();
     this.drip = { pinata: 0, chest: 0, triple: 0 }; // dry-move pity counters
     this.pendingChests = 0;      // chests queued to ride in on the next refill
-    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; // cap telemetry, per segment
+    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; // cap/food telemetry, per segment
+    this.foodCells = new Map();
   }
 
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
@@ -428,6 +429,7 @@ class PersistentGame extends Game {
     this.genBoard();
     this.marks = new Set();
     this.pinatas = new Map(); this.triples = new Set(); this.tripleArmed = false;
+    this.foodCells = new Map(); // key -> respawns left (cell layer, like marks)
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
@@ -457,23 +459,21 @@ class PersistentGame extends Game {
   }
 
   /* --------------------------- Chomper food ------------------------------
-     Inert snack tiles (colour -3) only Chomper can consume — protectedTile
-     covers them against matches, explosions, lava, floods, and reshuffles;
-     they still ride gravity like any tile. Each pays CHOMPER_FOOD_BONUS when
-     eaten, respawns ONCE at a random interior cell, then is gone for good. */
-  protectedTile(t) { return super.protectedTile(t) || !!(t && t.food); }
-
+     Food lives on the CELL layer, exactly like xtra-move marks: it sits
+     BEHIND pieces (foodCells: key -> respawns left), pieces on it match and
+     clear normally, and it never moves. Unlike marks/piñatas/triples, food
+     cells are NOT walls — Chomper walks onto them and eats the snack
+     (+CHOMPER_FOOD_BONUS). Each respawns ONCE elsewhere, then is gone. */
   foodCellOk(r, c) {
     if (r <= 0 || r >= this.rows - 1 || c <= 0 || c >= this.cols - 1) return false; // interior only
     const k = K(r, c);
-    if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) return false; // marked cells wall Chomper off
+    if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) return false;
     const t = this.board[r][c];
-    return !!t && !t.special && !t.food && !t.chomper && !t.chest;
+    return !!t && !t.special && !t.chomper && !t.chest; // spec: not on a special / Chomper (chest would block his step)
   }
 
   spawnFoodAt(r, c, respawns) {
-    this.board[r][c] = { id: this.tileId++, color: -3, food: true, foodRespawns: respawns,
-                         special: null, dir: null, countdown: null, fresh: true };
+    this.foodCells.set(K(r, c), respawns);
     this.addFx(r, c, '🍖', 'emoji');
   }
 
@@ -510,28 +510,24 @@ class PersistentGame extends Game {
     while (placed < CONFIG.CHOMPER_FOOD_COUNT) { if (!this.spawnFoodRandom(1)) break; placed++; }
   }
 
-  // Detect what Chomper ate by tile identity (food rides gravity, so cell
-  // positions are useless): snapshot food ids before his move, award + maybe
-  // respawn whatever went missing after.
+  // Eat on arrival: after his step, any Chomper standing on a food cell
+  // consumes it (cell marks never move, so position is the identity).
   async chomperMove() {
-    const before = new Map();
-    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
-      const t = this.board[r][c];
-      if (t && t.food) before.set(t.id, t.foodRespawns);
-    }
     await super.chomperMove();
-    if (!before.size) return;
-    const after = new Set();
+    if (!this.foodCells.size) return;
     for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
       const t = this.board[r][c];
-      if (t && t.food) after.add(t.id);
-    }
-    for (const [id, respawns] of before) {
-      if (after.has(id)) continue;
+      if (!t || !t.chomper) continue;
+      const k = K(r, c);
+      if (!this.foodCells.has(k)) continue;
+      const respawns = this.foodCells.get(k);
+      this.foodCells.delete(k);
       this.score += CONFIG.CHOMPER_FOOD_BONUS;
       this.segFood = (this.segFood || 0) + 1;
-      this.callout(`😬 nom! +${CONFIG.CHOMPER_FOOD_BONUS}`);
+      this.addFx(r, c, `🍖 +${CONFIG.CHOMPER_FOOD_BONUS}`, 'big');
+      this.callout('😬 nom!');
       if (respawns > 0) this.spawnFoodRandom(respawns - 1); // one respawn, then gone for good
+      this.render();
     }
   }
 
@@ -705,7 +701,7 @@ class PersistentGame extends Game {
       if ((r === 0 || r === this.rows - 1) && (c === 0 || c === this.cols - 1)) continue;
       const k = K(r, c);
       if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) continue;
-      if (this.board[r] && this.board[r][c] && this.board[r][c].food) continue; // marked cells wall Chomper off his snacks
+      if (this.foodCells.has(k)) continue; // marked cells would wall Chomper off his snacks
       this.marks.add(k);
       this.addFx(r, c, '🔄', 'emoji');
       return true;
@@ -946,7 +942,7 @@ function Board({ G }) {
     // the back aligns with the piece's body, not its upper face (CD)
     const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
-      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
+      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '') + (G.foodCells.has(cellKey) ? ' foodc' : '')}
       style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
@@ -968,7 +964,6 @@ function Board({ G }) {
     const pieceSlot = 'piece.' + SKIN.PIECE_SLOTS[t.color];
     const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
       : t.chest ? slotImg('tile.chest', 'piece-img')
-      : t.food ? slotImg('tile.food', 'piece-img') // v9: art slot for Ophir; falls back to CSS+emoji
       : ((G.mods.boosts[t.color] || 0) > 0 && slotImg(pieceSlot + '.boosted', 'piece-img'))
         || slotImg(pieceSlot, 'piece-img');
     const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
@@ -976,12 +971,11 @@ function Board({ G }) {
     // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
     tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : t.food ? 'food' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
         ${art}
         ${spArt}
         ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
-        ${!art && t.food ? h`<span className="spe">🍖</span>` : null}
         ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
         ${!spArt && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
@@ -1010,6 +1004,11 @@ function Board({ G }) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
       style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
+  }
+  for (const [k, left] of G.foodCells) {
+    const [r, c] = k.split(',').map(Number);
+    cellmarks.push(h`<div key=${'fd' + k} className=${'cellmark food' + (left ? '' : ' last')}
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.food', 'mark-img') || '🍖'}</div>`);
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
