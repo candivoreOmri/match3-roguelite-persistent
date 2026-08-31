@@ -17,7 +17,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 13, // v13: regular and boss curves decoupled; world-1 retuned (regular was trivial)
+  BALANCE_VERSION: 14, // v14: world-1 checkpoint move grants trimmed (Omri: refills too generous)
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -80,8 +80,12 @@ const CONFIG = {
   // v6 full-roster tuning. Last grant slot is unused since v10 (the final
   // flag ends the run).
   WORLD_START_MOVES: [9, 10, 10],  // opening move pool per world
+  // v14: world-1 grants trimmed by 1 each (Omri: checkpoint refills too
+  // generous). With the v13 curve this lands the bot at 22% wins (was 39%),
+  // finishing with 0-7 moves to spare — surplus now has to be EARNED
+  // (momentum / xtra-move refunds), not granted. Worlds 2/3 untouched.
   WORLD_CHECKPOINT_MOVES: [
-    [6, 6, 7, 7, 8],
+    [5, 5, 6, 6, 7],
     [8, 10, 11, 12, 13],
     [8, 10, 11, 12, 13],
   ],
