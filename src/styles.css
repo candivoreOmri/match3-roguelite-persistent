@@ -52,19 +52,34 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
-  background: var(--bg); color: var(--text);
+  background: #0d0a1c; /* dev backdrop behind the phone frame */
+  color: var(--text);
   font-family: var(--font-body);
   -webkit-user-select: none; user-select: none;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
-#root { height: 100%; }
+#root { height: 100%; display: flex; align-items: center; justify-content: center; }
 
 /* skin-slot img hosts: constrain injected art to its box (match-quest .slot-ic fix) */
 .slot-ic, .skin-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
+/* ------- mobile phone frame: the whole game lives inside it -------
+   Overlays and callouts are position:absolute so they anchor to the frame,
+   never the page (match-quest lesson: body-level fixed overlays were a bug). */
+.phone {
+  position: relative; width: 402px; height: min(874px, 100dvh);
+  background: var(--bg); overflow: hidden;
+  border-radius: 28px; border: 1px solid var(--border);
+  box-shadow: 0 0 0 6px #0a0716, 0 18px 60px rgba(0, 0, 0, .65);
+}
+@media (max-width: 430px), (max-height: 900px) {
+  /* real device / small window: the frame IS the viewport */
+  .phone { width: 100vw; height: 100dvh; border-radius: 0; border: none; box-shadow: none; }
+}
+
 .screen {
-  min-height: 100vh; max-width: 560px; margin: 0 auto;
+  height: 100%; overflow-y: auto; overflow-x: hidden;
   display: flex; flex-direction: column; align-items: center;
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
 }
@@ -164,19 +179,43 @@ button.primary {
   width: 100%; max-width: 420px; display: flex; align-items: center; gap: 12px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px;
 }
-.hud-lv { font-size: 13px; font-weight: 800; color: var(--text-dim); white-space: nowrap; }
-.hud-score { flex: 1; }
 .bar { height: 8px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
 .fill { height: 100%; background: var(--bar-fill); border-radius: 99px; transition: width .3s; }
 .nums { font-size: 13px; font-weight: 700; margin-top: 4px; }
 .mult { color: var(--gold); font-weight: 800; }
-.hud-moves { font-size: 17px; font-weight: 800; white-space: nowrap; }
 .fastbadge { padding: 4px 8px; font-size: 14px; border-color: var(--gold); border-radius: 8px; }
-.hud-moves.low {
-  color: #fff; background: #a82a22; border-radius: 9px; padding: 3px 9px;
+
+/* moves: its own container on the LEFT of the HUD (CD, 2026-08-31) */
+.hud-moves-box {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--sunken); border: 1px solid var(--border); border-radius: 12px;
+  padding: 5px 10px; line-height: 1.1; min-width: 54px; gap: 1px;
+}
+.hud-moves-box b { font-size: 19px; }
+.hud-moves-box .hmb-ic { font-size: 12px; }
+.hud-moves-box.low {
+  color: #fff; background: #a82a22; border-color: var(--danger);
   animation: pulse 1s infinite;
 }
 @keyframes pulse { 50% { opacity: .5; } }
+
+/* goals: one icon per goal above a per-goal progress bar (CD, 2026-08-31) */
+.hud-goal { flex: 1; min-width: 0; }
+.goal-row { display: flex; gap: 5px; margin-bottom: 6px; }
+.goal-ic {
+  width: 19px; height: 19px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; line-height: 1;
+  background: var(--sunken); color: var(--text-faint); border: 1px solid var(--border);
+}
+.goal-ic.done { background: var(--gold); color: #3a2b00; border-color: var(--gold); }
+.goal-ic.cur {
+  background: var(--cta); color: #fff; border: none;
+  box-shadow: 0 0 8px rgba(233, 95, 208, .65);
+  animation: goalGlow 1.6s ease-in-out infinite;
+}
+@keyframes goalGlow { 50% { box-shadow: 0 0 3px rgba(233, 95, 208, .35); } }
+.bar.goalbar { height: 10px; }
 
 .fillmeter {
   width: 100%; max-width: 420px; display: flex; align-items: center; gap: 8px;
@@ -374,7 +413,7 @@ button.primary {
 @keyframes floatUp { from { opacity: 1; } to { opacity: 0; transform: translate(-50%, -220%); } }
 
 .callouts {
-  position: fixed; top: 34%; left: 0; right: 0; display: flex;
+  position: absolute; top: 34%; left: 0; right: 0; display: flex;
   flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 20;
 }
 .callout {
@@ -396,8 +435,9 @@ button.primary {
 .powerbar { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; }
 
 /* ------- overlays / end ------- */
+/* absolute, not fixed: the phone frame is the containing block */
 .overlay {
-  position: fixed; inset: 0; background: rgba(10, 6, 24, .75); z-index: 30;
+  position: absolute; inset: 0; background: rgba(10, 6, 24, .75); z-index: 30;
   display: flex; align-items: center; justify-content: center; padding: 20px;
 }
 .panel {
@@ -415,29 +455,20 @@ button.primary {
 .end-export { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; max-width: 380px; }
 .end-export button { font-size: 13px; padding: 8px 14px; color: var(--text-mid); }
 
-/* ---- persistent-board fork: run-long progress bar with checkpoint ticks ---- */
-.bar.runbar { position: relative; height: 10px; overflow: visible; }
-.bar.runbar .fill { border-radius: 99px; }
-.cp-tick {
-  position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1px;
-  background: #4a3e7a; border-radius: 2px; transition: background .3s, box-shadow .3s;
-}
-.cp-tick.done { background: var(--gold); box-shadow: 0 0 6px #ffd54a99; }
 .nums .endless { color: #ff9d4d; font-weight: 800; letter-spacing: .5px; }
 
-/* ---- persistent-board fork: inline mid-run draft (board stays visible) ---- */
-.draft-inline { width: 100%; max-width: 520px; margin-top: 10px; animation: dslide .25s ease; }
+/* ---- mid-run draft: overlay over the darkened board (CD, 2026-08-31) ---- */
+.draft-overlay { align-items: center; }
+.draft-sheet {
+  width: 100%; max-width: 340px; max-height: 94%; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  animation: dslide .25s ease;
+}
 @keyframes dslide { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .draft-inline-title {
   font-family: var(--font-display); font-weight: 400;
-  text-align: center; font-size: 17px; color: var(--gold); margin-bottom: 8px;
+  text-align: center; font-size: 19px; color: var(--gold);
   text-shadow: var(--title-outline);
 }
-.draft-inline .cards { display: flex; flex-direction: row; gap: 8px; align-items: stretch; max-width: none; }
-.draft-inline .card { flex: 1; min-width: 0; padding: 10px 8px; gap: 4px; }
-.draft-inline .card-icon { font-size: 22px; }
-.draft-inline .card-name { font-size: 12.5px; }
-.draft-inline .card-desc { font-size: 11px; line-height: 1.35; }
-.draft-inline .card-tag { font-size: 9.5px; }
 .movecap { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .fill-fill.sfill { background: linear-gradient(90deg, #58a6ff, #bfe3ff); }

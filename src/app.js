@@ -644,7 +644,8 @@ class PersistentGame extends Game {
 const h = htm.bind(React.createElement);
 
 function useCellSize(cols) {
-  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 520) - 28) / cols)));
+  // board sizes to the phone frame (.phone, 402px), not the raw viewport
+  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 402) - 28) / cols)));
   const [s, setS] = React.useState(calc);
   React.useEffect(() => {
     const f = () => setS(calc());
@@ -734,7 +735,7 @@ function MenuScreen({ G }) {
   const [seed, setSeed] = React.useState(() => String(1 + Math.floor(Math.random() * 999999999)));
   return h`<div className="screen menu">
     <h1>🏔️ Match-3 Roguelite — Ascent</h1>
-    <p className="sub">One board, one bar. Cross ${CONFIG.CHECKPOINTS.length} score checkpoints — each pays moves and a power-up draft — then chase a high score until your moves run out.</p>
+    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a power-up draft — then chase a high score until your moves run out.</p>
     <div className="menu-box">
       <label>Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
       <${Toggle} G=${G} />
@@ -761,7 +762,7 @@ function DraftScreen({ G }) {
       <${ColourToggle} G=${G} />
     </div>
     <p className="sub">${G.board
-      ? `Score ${G.score} — ${next !== null ? `next checkpoint at ${next}` : 'endless chase!'} · 👟 ${G.movesLeft} moves banked`
+      ? `Score ${G.score} — ${next !== null ? `next goal at ${next}` : 'endless chase!'} · 👟 ${G.movesLeft} moves banked`
       : 'Pick a power-up — it lasts the whole run.'}</p>
     <div className="cards">
       ${G.offers.map((o, i) => {
@@ -964,28 +965,28 @@ function MomentumMeter({ G }) {
 
 function LevelScreen({ G }) {
   const cps = G.checkpoints();
-  const n = cps.length;
   const idx = G.run.checkpointIdx;
-  const next = idx < n ? cps[idx] : null;
-  // Equal-spaced checkpoint segments (linear score would cram the early flags
-  // into the bar's first 10%); the fill interpolates within the live segment.
+  const next = idx < cps.length ? cps[idx] : null;
+  // Goals UX (CD, 2026-08-31): each goal is its own bar — the fill tracks
+  // progress within the CURRENT goal only and resets when it's cleared.
   const prev = idx > 0 ? cps[idx - 1] : 0;
-  const frac = next !== null ? Math.max(0, Math.min(1, (G.score - prev) / (next - prev))) : 1;
-  const pct = Math.min(100, ((idx + frac) / n) * 100);
+  const pct = next !== null ? Math.max(0, Math.min(100, ((G.score - prev) / (next - prev)) * 100)) : 100;
   const cp = G.lastCheckpoint;
   return h`<div className="screen level-screen">
     <div className="hud">
-      <div className="hud-lv">🚩 ${G.run.checkpointIdx}/${cps.length}</div>
-      <div className="hud-score">
-        <div className="bar runbar">
-          <div className="fill" style=${{ width: pct + '%' }}></div>
-          ${cps.map((v, i) => h`<div key=${i} title=${v}
-            className=${'cp-tick' + (G.score >= v ? ' done' : '')}
-            style=${{ left: ((i + 1) / n) * 100 + '%' }}></div>`)}
-        </div>
-        <div className="nums">${G.score}${next !== null ? ` / ${next}` : h` <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
+      <div className=${'hud-moves-box' + (G.movesLeft <= 3 ? ' low' : '')}>
+        <span className="hmb-ic">👟</span>
+        <b>${G.movesLeft}</b>
+        <span className="movecap">/${CONFIG.MAX_MOVES}</span>
       </div>
-      <div className=${'hud-moves' + (G.movesLeft <= 3 ? ' low' : '')}>👟 ${G.movesLeft}<span className="movecap">/${CONFIG.MAX_MOVES}</span></div>
+      <div className="hud-goal">
+        <div className="goal-row">${cps.map((v, i) => h`<span key=${i} title=${v}
+          className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
+        <div className="bar goalbar"><div className="fill" style=${{ width: pct + '%' }}></div></div>
+        <div className="nums">${next !== null
+          ? `${Math.max(0, G.score - prev)} / ${next - prev}`
+          : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
+      </div>
       ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
         onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
     </div>
@@ -997,8 +998,8 @@ function LevelScreen({ G }) {
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel">
-        <h2>🚩 Checkpoint ${cp.n}${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves${cp.final ? ' — final flag planted! The endless chase begins 🔥' : ''}</p>
+        <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
+        <p>+${cp.moves} moves${cp.final ? ' — final goal cleared! The endless chase begins 🔥' : ''}</p>
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}
@@ -1006,22 +1007,24 @@ function LevelScreen({ G }) {
   </div>`;
 }
 
-// Mid-run draft: compact cards UNDER the board — testers pick with the board
-// in view (colour counts, marks, chest positions are part of the decision).
+// Mid-run draft: an overlay OVER the board — darkened scrim, cards on top
+// (CD, 2026-08-31; replaces the under-the-board inline strip).
 function InlineDraft({ G }) {
-  return h`<div className="draft-inline">
-    <div className="draft-inline-title">Draft ${G.run.level} — pick a power-up</div>
-    <div className="cards">
-      ${G.offers.map((o, i) => {
-        const def = POWERUPS[o.id];
-        return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
-          <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
-          <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
-          <div className="card-desc">${def.desc(o)}</div>
-          <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
-          ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
-        </button>`;
-      })}
+  return h`<div className="overlay draft-overlay">
+    <div className="draft-sheet">
+      <div className="draft-inline-title">Draft ${G.run.level} — pick a power-up</div>
+      <div className="cards">
+        ${G.offers.map((o, i) => {
+          const def = POWERUPS[o.id];
+          return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
+            <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
+            <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+            <div className="card-desc">${def.desc(o)}</div>
+            <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
+            ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
+          </button>`;
+        })}
+      </div>
     </div>
   </div>`;
 }
@@ -1038,7 +1041,7 @@ function EndScreen({ G }) {
   return h`<div className="screen end">
     <h1>${win ? '🏆 Summit reached!' : '💀 Out of moves'}</h1>
     <div className="end-stats">
-      <div><b>${G.run.checkpointIdx}</b> / ${CONFIG.CHECKPOINTS.length} checkpoints crossed</div>
+      <div><b>${G.run.checkpointIdx}</b> / ${CONFIG.CHECKPOINTS.length} goals cleared</div>
       <div><b>${G.score}</b> final score</div>
       <div className="seedline">seed ${G.seed}</div>
     </div>
@@ -1081,12 +1084,15 @@ function App() {
     };
   }
   const G = ref.current;
-  if (G.phase === 'menu') return h`<${MenuScreen} G=${G} />`;
-  // Run-start draft has no board yet → full screen. Mid-run drafts render
-  // inside LevelScreen so the board stays visible (tester feedback).
-  if (G.phase === 'draft' && !G.board) return h`<${DraftScreen} G=${G} />`;
-  if (G.phase === 'win' || G.phase === 'loss') return h`<${EndScreen} G=${G} />`;
-  return h`<${LevelScreen} G=${G} />`;
+  let screen;
+  if (G.phase === 'menu') screen = h`<${MenuScreen} G=${G} />`;
+  // Run-start draft has no board yet → full screen. Mid-run drafts render as
+  // an overlay inside LevelScreen so the board stays visible (tester feedback).
+  else if (G.phase === 'draft' && !G.board) screen = h`<${DraftScreen} G=${G} />`;
+  else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
+  else screen = h`<${LevelScreen} G=${G} />`;
+  // Everything lives inside the phone frame; overlays/callouts anchor to it.
+  return h`<div className="phone">${screen}</div>`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(h`<${App} />`);

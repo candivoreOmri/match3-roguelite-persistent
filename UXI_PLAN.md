@@ -30,6 +30,20 @@ the CD (2026-08-31):
 4. **Menu screen** — keep seed/toggles for playtesting but move them into a
    collapsed dev drawer (match-quest pattern), player-facing start stays clean. OK?
 
+## CD adjustments (2026-08-31, done pre-Phase A)
+
+1. **Mobile wrapper** — the whole game renders inside a `.phone` frame (402×874
+   bezel on desktop, full-bleed on real devices / small windows). Overlays and
+   callouts anchor to the frame (`position: absolute`), never the page.
+2. **Drafts as overlays** — mid-run drafts darken the board and show the cards
+   over it (replaces the under-the-board inline strip; resolves G15). The
+   run-start draft (no board yet) stays full-screen.
+3. **Checkpoints → Goals** — player-facing rename (code ids untouched). Each
+   goal is its own bar: the fill tracks the current goal only and resets on
+   clear; a goal-icon counter above shows one badge per goal (✓ gold when
+   cleared, glowing number for the current one); moves live in their own
+   container on the LEFT of the HUD.
+
 ## What already works (do not redo)
 
 | Thing | Notes |
@@ -37,7 +51,7 @@ the CD (2026-08-31):
 | Juice layer | Pop-kind animations (boom/zap/line/sweep/special), particles, screen shake, spawn bounce, chomp bite — solid foundation, only re-tuned in the final motion pass |
 | Low-moves danger | Vignette pulse escalating at ≤3/≤2/≤1 moves + red moves pill — keep, restyle only |
 | Inline mid-run draft | Board-stays-visible drafting was deliberate tester feedback — keep the concept, upgrade the presentation |
-| Run bar mechanics | Equal-spaced checkpoint ticks + segment-interpolated fill — logic stays, becomes the visual hero |
+| Goal bar mechanics | Per-goal fill + goal-badge counter (CD adjustment 3) — logic stays, Phase A styles it into the enchanted-trail hero |
 | Meters | Fill-up / momentum / snowball bars are functionally clear — consolidate + restyle, don't redesign |
 | Layout skeleton | Single-column mobile flow, `useCellSize` responsive board — sound |
 
@@ -62,7 +76,7 @@ Refs cite folders in `~/Desktop/uxi ref library`.
 | G12 | Menu: dev controls exposed (seed input, toggles) | Clean player-facing start (logo slot, single CTA); seed/draft/colour toggles + stats into a collapsed DEV drawer | M | squad busters (lobby simplicity) |
 | G13 | Callouts: grey pills, fixed at 34% viewport | Display-type callouts with kind-specific styling (reward gold / danger red / combo orange), positioned relative to board | S | match masters (in-level callouts) |
 | G14 | Power-bar chips: emoji pills + plain info strip | Icon-slot chips with count badges, styled active/used states, info bubble anchored to the chip | M | afk journey (loadout rows) |
-| G15 | Inline draft can land below the fold on short screens | Draft presented as a bottom sheet sliding over (not under) the layout — board stays visible above, no scroll needed | M | — (fix, not a ref) |
+| ~~G15~~ | ~~Inline draft below the fold~~ | Resolved by CD adjustment 2 — drafts overlay the darkened board | ✓ | — |
 
 ## Phases — one PR per phase (Omri ships fast on `main`; keep rebases cheap)
 
@@ -71,7 +85,7 @@ Refs cite folders in `~/Desktop/uxi ref library`.
 | **0 · Plumbing** | — | Port `skin.js` (with `.slot-ic` fix) + `skin.json` + `styleguide.html` + `placeholders.sha1` ledger; fonts dir + Gasoek One; CSS design-token layer (`:root` palette/radii/shadows/type scale); `.claude/launch.json` + `sync.sh` (done, ship in this PR); ASSET_MANIFEST.md skeleton |
 | **A · Shell & HUD** | G1 G2 G4 G5 | App backdrop, typography pass, hero run-bar, meter cluster |
 | **B · Board zone** | G6 G7 G8 | Board chrome, piece/special/marker slots, near-touching pieces |
-| **C · Draft & checkpoint** | G9 G10 G15 | Premium draft cards, bottom-sheet inline draft, checkpoint celebration |
+| **C · Draft & goals** | G9 G10 | Premium draft cards, goal-cleared celebration |
 | **D · Menu & end** | G11 G12 G13 G14 | Clean menu + dev drawer, end screens, callouts, power-bar chips |
 | **E · Motion & assets** | G3 + polish | Re-tune juice against the new art; integrate CD asset waves as they land (slots make this ongoing, not blocking) |
 
