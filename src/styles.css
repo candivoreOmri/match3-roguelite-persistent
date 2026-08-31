@@ -621,3 +621,16 @@ button.primary {
 }
 .movecap { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .fill-fill.sfill { background: linear-gradient(90deg, #58a6ff, #bfe3ff); }
+
+/* ---- v9: chomper food tiles (placeholder look until tile.food art lands) ---- */
+.tin.food {
+  background: radial-gradient(circle at 35% 30%, #ffd9a0, #a8681f 78%);
+  border-radius: 38%;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.3), 0 0 8px rgba(255,180,90,.4);
+  animation: foodWaft 1.8s ease-in-out infinite;
+}
+.tin.food .spe { font-size: 1.25em; }
+@keyframes foodWaft {
+  0%, 100% { transform: scale(1); box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.3), 0 0 6px rgba(255,180,90,.35); }
+  50% { transform: scale(1.06); box-shadow: inset 0 -3px 0 rgba(0,0,0,.3), inset 0 2px 0 rgba(255,255,255,.3), 0 0 14px rgba(255,180,90,.7); }
+}

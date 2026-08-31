@@ -110,6 +110,12 @@ class Game {
   render() { this.onRender(); }
   // fast=true skips animation delays (scripted testing; hidden tabs throttle timers)
   sleep(ms) { return this.fast ? Promise.resolve() : new Promise(res => setTimeout(res, ms)); }
+  // Seam for variants: tiles that nothing on the board may clear, recolour,
+  // or transform (board effects, explosions, floods/converter, reshuffles).
+  // Base behaviour: chests and chompers. Chomper's own eating is exempt —
+  // his prey rules live in chomperMove.
+  protectedTile(t) { return !!(t && (t.chest || t.chomper)); }
+
   emptyMods() {
     return { boosts: {}, bombChance: 0, autoExplode: false, countdown: false,
              blastBonus: 0, specialScore: 0, expandRows: 0, expandCols: 0,
@@ -345,7 +351,7 @@ class Game {
     for (let tries = 0; tries < 40; tries++) {
       for (let r = 0; r < this.rows; r++)
         for (let c = 0; c < this.cols; c++)
-          if (this.board[r][c] && !this.board[r][c].chest && !this.board[r][c].chomper) this.board[r][c].color = this.rollColorAvoidingMatches(r, c);
+          if (this.board[r][c] && !this.protectedTile(this.board[r][c])) this.board[r][c].color = this.rollColorAvoidingMatches(r, c);
       if (this.findAnyMove() && !this.findGroups().length) return;
     }
   }
@@ -516,7 +522,7 @@ class Game {
     const addClear = (r, c, explosion, opts = {}) => {
       if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
       const t = this.board[r][c];
-      if (!t || t.chest || t.chomper) return false; // chests and chompers are indestructible
+      if (!t || this.protectedTile(t)) return false; // protected tiles are indestructible
       const k = K(r, c);
       if (cleared.has(k)) return false;
       const delay = Math.min(500, opts.delay || 0);
@@ -672,7 +678,7 @@ class Game {
           const rr = r + dr, cc = c + dc;
           if (rr < 0 || rr >= this.rows || cc < 0 || cc >= this.cols) continue;
           const t = this.board[rr][cc];
-          if (t && !t.chest && !cleared.has(K(rr, cc))) t.volatile = this.moveNum + 1;
+          if (t && !this.protectedTile(t) && !cleared.has(K(rr, cc))) t.volatile = this.moveNum + 1;
         }
       }
     }
@@ -779,7 +785,7 @@ class Game {
           if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
           seen.add(k);
           const t = this.board[r][c];
-          if (t && !t.pop && !t.chest && t.color !== f.color) cands.push({ r, c });
+          if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) cands.push({ r, c });
         }
       } else { // board-wide (Converter)
         // prefer targets that don't instantly complete a match — conversion
@@ -787,7 +793,7 @@ class Game {
         const risky = [];
         for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
           const t = this.board[r][c];
-          if (t && !t.pop && !t.chest && t.color !== f.color) {
+          if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) {
             (this.wouldMatchAt(r, c, f.color) ? risky : cands).push({ r, c });
           }
         }
@@ -1031,7 +1037,7 @@ class Game {
     const cells = [];
     for (let c = 0; c < this.cols; c++) {
       const t = this.board[this.rows - 1][c];
-      if (t && !t.chest && !t.chomper) cells.push({ r: this.rows - 1, c });
+      if (t && !this.protectedTile(t)) cells.push({ r: this.rows - 1, c });
     }
     if (!cells.length) return;
     const res = this.processStep([], null, [], cells);
