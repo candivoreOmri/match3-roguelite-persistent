@@ -239,10 +239,10 @@ button.primary {
 .hud-moves-box {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--sunken); border: 1px solid var(--border); border-radius: 12px;
-  padding: 5px 12px; line-height: 1.05; min-width: 72px; gap: 1px;
+  padding: 5px 16px; line-height: 1.05; min-width: 96px; gap: 1px;
 }
 .hmb-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); }
-.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 27px; color: #fff; }
+.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 36px; color: #fff; }
 .hud-moves-box .movecap { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-faint); }
 .hud-moves-box.low {
   color: #fff; background: #a82a22; border-color: var(--danger);
@@ -346,13 +346,16 @@ button.primary {
 .bgcell.tri { box-shadow: inset 0 0 0 2px #58e0d0; background: rgba(88,224,208,.14); }
 .cellmark {
   position: absolute; z-index: 12; pointer-events: none; /* above stacked tiles (z ≤ 10) */
-  display: inline-flex; align-items: center; gap: 2px;
-  font-size: 10px; font-weight: 800; line-height: 1;
-  background: rgba(18, 12, 38, .92); border-radius: 8px; padding: 2px 5px;
-  transform: translate(-3px,-3px);
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 14px; font-weight: 800; line-height: 1;
+  background: rgba(18, 12, 38, .92); border-radius: 10px; padding: 3px 7px;
+  transform: translate(-4px,-4px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .45);
 }
 .cellmark.pinata { border: 1px solid #ff7ac8; color: #ffb3de; }
 .cellmark.triple { border: 1px solid #58e0d0; color: #8df0e4; }
+.cellmark.xmark { border: 1px solid var(--gold); color: var(--gold); }
+.cellmark .mark-img { width: 22px; height: 22px; }
 
 .tile { position: absolute; padding: 0; transition: transform .22s cubic-bezier(.3,.7,.35,1.1); will-change: transform; }
 /* stacked-volume piece art (CD, 2026-08-31): the square asset carries a top
@@ -371,7 +374,6 @@ button.primary {
 }
 .tin.skinned { background: none; box-shadow: none; }
 .tin.sp.skinned { box-shadow: none; }
-.cellmark .mark-img { width: 14px; height: 14px; object-fit: contain; }
 .bgcell .skin-img { width: 68%; height: 68%; }
 .tin {
   width: 100%; height: 100%; border-radius: 9px; position: relative;

@@ -27,8 +27,11 @@ const SKIN = (() => {
       if (xhr.status === 200) slots = (JSON.parse(xhr.responseText).slots) || {};
     } catch (e) { console.warn('skin.json not loaded — emoji/CSS fallbacks active', e); }
   }
-  // data URIs (inlined build) pass through untouched; files resolve under assets/
-  const url = id => slots[id] ? (slots[id].startsWith('data:') ? slots[id] : 'assets/' + slots[id]) : null;
+  // data URIs (inlined build) pass through untouched; files resolve under
+  // assets/ with a per-pageload cache-buster, so replacing a PNG on disk +
+  // sync + plain refresh always shows the new art (no hard-refresh needed).
+  const CB = '?cb=' + Date.now();
+  const url = id => slots[id] ? (slots[id].startsWith('data:') ? slots[id] : 'assets/' + slots[id] + CB) : null;
   // colour index ↔ manifest colour-slot names (bg0..bg5 in styles.css)
   const PIECE_SLOTS = ['red', 'yellow', 'green', 'blue', 'purple', 'orange'];
   return {

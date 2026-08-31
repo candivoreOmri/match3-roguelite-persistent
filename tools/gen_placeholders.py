@@ -193,15 +193,32 @@ def nine(slot, kind):
     elif kind == 'chip':
         img = rounded(vgrad(128, 128, (43, 33, 86), (34, 26, 68)), 56)
         ImageDraw.Draw(img).rounded_rectangle([1, 1, 126, 126], 56, outline=(64, 51, 110, 255), width=3)
-    elif kind == 'track':
-        img = rounded(Image.new('RGBA', (128, 128), (28, 22, 56, 255)), 60)
-        ImageDraw.Draw(img).rounded_rectangle([1, 1, 126, 126], 60, outline=(64, 51, 110, 255), width=3)
-    elif kind == 'fill':
-        img = rounded(vgrad(128, 128, (139, 92, 246), (255, 122, 217)), 60)
-    elif kind == 'frame':
-        d = ImageDraw.Draw(img)
-        d.rounded_rectangle([2, 2, 125, 125], 40, outline=(85, 68, 144, 255), width=10)
-        d.rounded_rectangle([10, 10, 117, 117], 34, fill=(26, 20, 56, 235))
+    return img
+
+def pill(kind):
+    """Progress bars are stretched with background-size 100% — supply WIDE
+    pill art (512x64) so the end caps barely distort at bar aspect."""
+    if kind == 'track':
+        img = rounded(Image.new('RGBA', (512, 64), (28, 22, 56, 255)), 32)
+        ImageDraw.Draw(img).rounded_rectangle([1, 1, 510, 62], 32, outline=(64, 51, 110, 255), width=3)
+    else:
+        grad = vgrad(512, 64, (160, 105, 250), (233, 95, 208))
+        img = rounded(grad.transpose(Image.ROTATE_90).resize((512, 64)), 32)
+    return img
+
+def board_frame(slot):
+    """512x512, 9-slice slice 96 (displayed ~20px border): decorative outer
+    frame + dark inner fill + corner medallions (corners survive 9-slice)."""
+    img = Image.new('RGBA', (512, 512), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 6, 505, 505], 72, fill=(26, 20, 56, 240))     # inner fill
+    d.rounded_rectangle([6, 6, 505, 505], 72, outline=(101, 74, 189, 255), width=34)  # border
+    d.rounded_rectangle([6, 6, 505, 505], 72, outline=(63, 45, 122, 255), width=10)   # outer rim
+    d.rounded_rectangle([40, 40, 471, 471], 48, outline=(45, 33, 92, 255), width=8)   # inner rim
+    for cx, cy in ((48, 48), (464, 48), (48, 464), (464, 464)):           # corner medallions
+        d.rounded_rectangle([cx - 42, cy - 42, cx + 42, cy + 42], 24, fill=(74, 56, 140, 255),
+                            outline=(45, 33, 92, 255), width=5)
+        d.regular_polygon((cx, cy, 26), 4, rotation=0, fill=GOLD, outline=(120, 80, 0, 255))
     return img
 
 def marker(slot, ch=None, text=None):
@@ -250,11 +267,12 @@ def main():
     jobs['marker.triple'] = ('markers/triple.png', lambda: marker('marker.triple', text='×3'))
     jobs['board.cell'] = ('board/cell.png', lambda: board_cell('board.cell', False))
     jobs['board.cell-alt'] = ('board/cell-alt.png', lambda: board_cell('board.cell-alt', True))
-    jobs['board.frame'] = ('board/frame.png', lambda: nine('board.frame', 'frame'))
+    jobs['board.frame'] = ('board/frame.png', lambda: board_frame('board.frame'))
     for slot, kind in [('ui.button-primary', 'cta'), ('ui.panel', 'panel'),
-                       ('ui.chip', 'chip'), ('ui.overlay-card', 'card'),
-                       ('ui.progressbar-track', 'track'), ('ui.progressbar-fill', 'fill')]:
+                       ('ui.chip', 'chip'), ('ui.overlay-card', 'card')]:
         jobs[slot] = (f'ui/{slot.split(".")[1]}.png', lambda s=slot, k=kind: nine(s, k))
+    jobs['ui.progressbar-track'] = ('ui/progressbar-track.png', lambda: pill('track'))
+    jobs['ui.progressbar-fill'] = ('ui/progressbar-fill.png', lambda: pill('fill'))
     for pid, ch in sorted(powerup_icons().items()):
         jobs[f'icon.powerup.{pid}'] = (f'powerups/{pid}.png',
                                        lambda s=f'icon.powerup.{pid}', e=ch: emoji_icon(s, e))

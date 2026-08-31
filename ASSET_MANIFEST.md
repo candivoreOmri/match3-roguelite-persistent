@@ -64,12 +64,12 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `icon.momentum` | 🚀 meter icon |
 | `icon.fillup` | 🔋 meter icon |
 | `icon.snowball` | ❄️ meter icon |
-| `board.cell` / `board.cell-alt` | checkerboard bg cells |
-| `board.frame` | (none yet) 9-slice board frame |
+| `board.cell` / `board.cell-alt` | per-cell tile backs — stretched to each cell, re-tile automatically when the board expands; include your gap/margin inside the canvas |
+| `board.frame` | static decorative frame around the whole board: **512×512, 9-slice slice 96, drawn at 20px border, `fill` center** — corners (incl. medallions) stay crisp at any board size, edges stretch, the canvas center fills the area behind the cells |
 | `ui.button-primary` | gradient CTA (9-slice) |
 | `ui.panel` | HUD/panel surfaces (9-slice) |
 | `ui.chip` | power-bar chips (9-slice) |
-| `ui.progressbar-track` / `ui.progressbar-fill` | run bar + meters |
+| `ui.progressbar-track` / `ui.progressbar-fill` | goal bar — **512×64 horizontal pill**, stretched to the bar (wide art keeps the end caps clean) |
 | `ui.overlay-card` | checkpoint/draft panels (9-slice) |
 
 ## P3 — power-up icons (rolling)

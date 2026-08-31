@@ -844,7 +844,6 @@ function Board({ G }) {
       className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
       style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
-      ${G.marks.has(cellKey) ? (slotImg('marker.xtramove') || '🔄') : ''}
     </div>`);
     const t = G.board[r][c];
     if (!t) continue;
@@ -864,9 +863,9 @@ function Board({ G }) {
       : t.chest ? slotImg('tile.chest', 'piece-img')
       : slotImg('piece.' + SKIN.PIECE_SLOTS[t.color], 'piece-img');
     const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
-    // stacked volume: the art's bottom lip overhangs into the row below, and
-    // upper rows draw OVER lower ones (painter's order — z falls with row)
-    tileStyle.zIndex = (G.rows - r) + (isSel ? 11 : 0); /* stays under fx/callouts */
+    // stacked volume: the art's bottom lip tucks BEHIND the row below —
+    // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
+    tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
       <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
@@ -886,6 +885,12 @@ function Board({ G }) {
     </div>`);
   }
   const cellmarks = [];
+  // xtra-move marks ride ABOVE the tiles (opaque stacked art hides the cell)
+  for (const k of G.marks) {
+    const [r, c] = k.split(',').map(Number);
+    cellmarks.push(h`<div key=${'m' + k} className="cellmark xmark"
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.xtramove', 'mark-img') || '🔄'}</div>`);
+  }
   for (const [k, left] of G.pinatas) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'p' + k} className="cellmark pinata"
@@ -1014,7 +1019,7 @@ function LevelScreen({ G }) {
           onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
       <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}
-        style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 42 fill / 12px stretch`, borderWidth: '12px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '4px' } : null}><${Board} G=${G} /></div>
+        style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 96 fill / 20px stretch`, borderWidth: '20px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '6px' } : null}><${Board} G=${G} /></div>
       <div className="meters">
         <${FillupMeter} G=${G} />
         <${MomentumMeter} G=${G} />
