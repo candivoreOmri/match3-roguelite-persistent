@@ -83,8 +83,10 @@ body {
   border-radius: 28px; border: 1px solid var(--border);
   box-shadow: 0 0 0 6px #0a0716, 0 18px 60px rgba(0, 0, 0, .65);
 }
-@media (max-width: 450px), (max-height: 960px) {
-  /* real device / small window: the frame IS the viewport */
+@media (max-width: 450px) {
+  /* real device / phone-narrow window: the frame IS the viewport.
+     (Width only — short-but-wide desktop windows keep the bezel and the
+     frame just shrinks vertically via the height: min(...) above.) */
   .phone { width: 100vw; height: 100dvh; border-radius: 0; border: none; box-shadow: none; }
 }
 
