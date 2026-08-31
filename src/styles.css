@@ -328,6 +328,27 @@ button.primary {
 
 .powerbar { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; }
 
+/* ---- in-run consumables (v12) ---- */
+.consbar { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.consbtn { font-size: 18px; padding: 7px 14px; }
+.consbtn b { font-size: 12px; }
+.consbtn:disabled { opacity: .35; cursor: default; }
+.consbtn.active {
+  border-color: #ffd54a; background: #2c2612;
+  box-shadow: 0 0 10px rgba(255,213,74,.4);
+  animation: pulse 1.2s infinite;
+}
+.cons-hint {
+  font-size: 12px; font-weight: 700; color: #ffd54a;
+  background: #2c2612; border: 1px solid #4a4020; border-radius: 10px; padding: 5px 12px;
+}
+.board-wrap.aiming { cursor: crosshair; }
+.board-wrap.aiming::before {
+  content: ''; position: absolute; inset: -5px; border-radius: 15px; z-index: 8;
+  pointer-events: none; border: 2px dashed #ffd54a;
+  animation: pulse 1.2s infinite;
+}
+
 /* ------- overlays / end ------- */
 .overlay {
   position: fixed; inset: 0; background: rgba(8, 10, 15, .72); z-index: 30;

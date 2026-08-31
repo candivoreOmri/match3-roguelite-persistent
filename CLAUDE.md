@@ -39,15 +39,18 @@ accept/decline); each lap banks +1 starting move. After
 not a board space) — its negative modifier is announced before the run,
 and clearing it advances the world. Targets AND move grants are per-world
 (`WORLD_CHECKPOINTS`, `WORLD_START_MOVES`, `WORLD_CHECKPOINT_MOVES`) —
-world 1 is short (~35-move runs) and batch-1-winnable. World N
-auto-unlocks power-up batch N in the draft pool (`POWERUP_BATCHES` —
-data, wrapped over each roster entry's `disabled`; batch listing never
-resurrects a roster-disabled pick).
+and since v12 a regular run uses only the first `WORLD_RUN_CHECKPOINTS`
+flags of its world's curve (world 1: 3 flags, introductory) while the
+boss always climbs all 6. World N auto-unlocks power-up batch N in the
+draft pool (`POWERUP_BATCHES` — data, wrapped over each roster entry's
+`disabled`; batch listing never resurrects a roster-disabled pick).
 Worlds, space layouts, modifiers, and batches are all data tables in
 `src/app.js` — add space types / worlds / modifiers there, never in the
 engine. Meta state persists in localStorage under `rl_persistent_meta_v1`.
-Consumables (hammer/bomb/shuffle) are inventory-only for now — in-run usage
-is a future feature, as is the power-up unlock/reveal screen.
+Consumables (hammer 🔨 = smash/detonate one tile, bomb 🧨 = blast an area,
+shuffle 🔀) are usable in-run since v12 via the bar under the board — no
+move cost, inventory persists in META. The power-up unlock/reveal screen
+is still a future feature.
 `window.M3` exposes the engine internals (`G`, `trySwap`, `resolveBoard`, …);
 `trySwap` takes two cell **objects**: `trySwap({r,c},{r,c})`, not 4 numbers.
 

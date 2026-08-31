@@ -17,7 +17,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 11, // v11: world-1 shortened+tightened (per-world moves), boss via button, uncapped dice, buyable dice
+  BALANCE_VERSION: 12, // v12: world-1 regular runs = 3 flags (boss keeps 6), consumables usable in-run
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -67,6 +67,11 @@ const CONFIG = {
     [8, 10, 11, 12, 13],
     [8, 10, 11, 12, 13],
   ],
+  // v12: a REGULAR run only uses the first N flags of its world's curve —
+  // world 1 is introductory (3 flags ≈ 21-move runs); the BOSS always runs
+  // the full curve, so world 1's boss is twice the climb (Omri: the first
+  // boss was far too easy).
+  WORLD_RUN_CHECKPOINTS: [3, 6, 6],
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -594,6 +599,7 @@ class PersistentGame extends Game {
     this.runMods = [];           // board-granted run modifiers, snapshotted per run
     this.bossRun = false;
     this.runReward = null;       // {dice, bossCleared, worldAdvanced} for the end screen
+    this.armed = null;           // consumable awaiting a board tap ('hammer' | 'bomb')
   }
 
   /* ------------------- Board-meta run modifier plumbing ------------------ */
@@ -623,9 +629,12 @@ class PersistentGame extends Game {
   // after the phase flips to win/loss.
   finishRunMeta(win) {
     const leftover = Math.max(0, this.movesLeft);
+    // Partial clear scales with the run's flag count: on a short (3-flag)
+    // run the consolation die comes from reaching the second-to-last flag.
+    const partialAt = Math.min(CONFIG.PARTIAL_CLEAR_CHECKPOINT, this.checkpoints().length - 1);
     let dice;
     if (win) dice = Math.max(CONFIG.DICE_MIN_ON_WIN, leftover * CONFIG.DICE_PER_LEFTOVER_MOVE);
-    else if (this.run.checkpointIdx >= CONFIG.PARTIAL_CLEAR_CHECKPOINT) dice = CONFIG.DICE_ON_PARTIAL_CLEAR;
+    else if (this.run.checkpointIdx >= partialAt) dice = CONFIG.DICE_ON_PARTIAL_CLEAR;
     else dice = CONFIG.DICE_ON_LOSS;
     this.runReward = { dice: META.addDice(dice), bossCleared: false, worldAdvanced: false };
     if (this.bossRun && win) {
@@ -642,6 +651,47 @@ class PersistentGame extends Game {
     if (this.phase !== 'win' && this.phase !== 'loss') return;
     this.phase = 'menu'; // 'menu' renders the board hub
     this.board = null;
+    this.busy = false;
+    this.render();
+  }
+
+  /* ----- In-run consumables (v12) — board-earned items, META inventory.
+     No move cost. Hammer and bomb resolve through the engine's normal step
+     pipeline (explodeSeeds), so special chains, gravity, cascades, scoring,
+     and checkpoint crossings all just work. `armed` is the targeting mode:
+     the next board tap is the target instead of a swap. */
+  async useConsumable(kind, cell) {
+    if (this.phase !== 'level' || this.busy) return;
+    const inv = META.state.consumables;
+    if (!(inv[kind] > 0)) return;
+    this.armed = null;
+    if (kind === 'shuffle') {
+      inv.shuffle--; META.save();
+      this.busy = true;
+      this.callout('🔀 Shuffled!');
+      this.reshuffleBoard();
+      this.render();
+      await this.sleep(300);
+      this.busy = false;
+      this.render();
+      return;
+    }
+    if (!cell) return;
+    const t = this.board[cell.r] && this.board[cell.r][cell.c];
+    if (!t || t.chest || t.chomper) { // indestructible target — keep the item
+      if (t) { t.wiggle = true; this.render(); setTimeout(() => { delete t.wiggle; this.render(); }, 380); }
+      this.render();
+      return;
+    }
+    inv[kind]--; META.save();
+    this.busy = true;
+    this.addFx(cell.r, cell.c, kind === 'hammer' ? '🔨' : '🧨', 'emoji');
+    if (kind === 'bomb') { t.special = 'bomb'; t.countdown = null; this.doShake(8); }
+    // hammer on a special DETONATES it; on a plain tile the pseudo-special
+    // 'hammer' clears exactly that one tile (explosionCells → no extras)
+    else if (!t.special) { t.special = 'hammer'; t.countdown = null; }
+    await this.explodeSeeds([cell]);
+    this.checkLevelEnd();
     this.busy = false;
     this.render();
   }
@@ -695,8 +745,11 @@ class PersistentGame extends Game {
     this.runMods = META.state.modifiers.map(m => ({ ...m }));
     if (this.bossRun) for (const id of META.world().boss.modifiers) this.runMods.push({ id });
     this.runReward = null;
+    this.armed = null;
     // Boss "Six colours": force the colour count for this run only —
-    // finishRunMeta restores the player's own setting afterwards.
+    // finishRunMeta restores the player's own setting afterwards. If a
+    // previous run never finished (debug/cheat paths), undo its force first.
+    if (this.savedColours !== undefined) { this.opts.colours = this.savedColours; this.savedColours = undefined; }
     const forced = this.runModDefs().find(d => d.colours);
     if (forced) { this.savedColours = this.opts.colours; this.opts.colours = forced.colours; }
     this.seed = (seed >>> 0) || 1;
@@ -715,11 +768,14 @@ class PersistentGame extends Game {
   }
 
   // Checkpoint values: the current world's curve, colour-scaled (cumulative
-  // run score, not per-segment). The world can't change mid-run, so a live
-  // read is safe.
+  // run score, not per-segment). Regular runs use only the first
+  // WORLD_RUN_CHECKPOINTS flags; boss runs always climb the full curve.
+  // The world can't change mid-run, so a live read is safe.
   checkpoints() {
     const s = CONFIG.COLOUR_TARGET_SCALE[this.opts.colours] || 1;
-    const base = CONFIG.WORLD_CHECKPOINTS[Math.min(META.state.world, CONFIG.WORLD_CHECKPOINTS.length) - 1];
+    const w = Math.min(META.state.world, CONFIG.WORLD_CHECKPOINTS.length) - 1;
+    let base = CONFIG.WORLD_CHECKPOINTS[w];
+    if (!this.bossRun) base = base.slice(0, CONFIG.WORLD_RUN_CHECKPOINTS[w] || base.length);
     return base.map(v => Math.round(v * s));
   }
 
@@ -1500,6 +1556,7 @@ function Board({ G }) {
     if (G.fast) { G.fast = false; G.render(); }
     const cl = cellAt(e);
     if (!cl) return;
+    if (G.armed) { G.useConsumable(G.armed, cl); return; } // consumable targeting eats the tap
     drag.current = { ...cl, x: e.clientX, y: e.clientY, fired: false };
   };
   const onMove = e => {
@@ -1659,6 +1716,31 @@ function MomentumMeter({ G }) {
   </div>`;
 }
 
+// In-run consumable buttons — hammer/bomb arm a board tap, shuffle fires
+// immediately. Inventory is the persistent META stash (spent for good).
+function ConsumableBar({ G }) {
+  const inv = META.state.consumables;
+  if (!Object.values(inv).some(n => n > 0)) return null;
+  const arm = kind => {
+    if (G.phase !== 'level' || G.busy || !(inv[kind] > 0)) return;
+    if (kind === 'shuffle') { G.useConsumable('shuffle'); return; }
+    G.armed = G.armed === kind ? null : kind; // toggle = cancel
+    G.render();
+  };
+  return h`<div className="consbar">
+    ${G.armed ? h`<div className="cons-hint">${G.armed === 'hammer' ? '🔨 Tap a tile to smash it' : '🧨 Tap a tile to blast the area'} — tap again to cancel</div>` : null}
+    <div className="chip-row">
+      ${Object.values(CONSUMABLES).map(c => h`<button key=${c.id}
+        className=${'chip consbtn' + (G.armed === c.id ? ' active' : '')}
+        disabled=${!(inv[c.id] > 0) || G.busy}
+        title=${c.name}
+        onClick=${() => arm(c.id)}>
+        ${c.icon}<b>${inv[c.id] || 0}</b>
+      </button>`)}
+    </div>
+  </div>`;
+}
+
 function LevelScreen({ G }) {
   const cps = G.checkpoints();
   const n = cps.length;
@@ -1690,7 +1772,8 @@ function LevelScreen({ G }) {
     <${FillupMeter} G=${G} />
     <${MomentumMeter} G=${G} />
     <${SnowballMeter} G=${G} />
-    <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
+    <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '') + (G.armed ? ' aiming' : '')}><${Board} G=${G} /></div>
+    <${ConsumableBar} G=${G} />
     <${PowerBar} G=${G} />
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
