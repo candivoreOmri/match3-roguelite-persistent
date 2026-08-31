@@ -315,7 +315,7 @@ button.primary {
 /* low-moves danger vignette: pulses faster as moves run out */
 .board-wrap.danger::after {
   content: ''; position: absolute; inset: -6px; border-radius: 16px;
-  pointer-events: none; z-index: 8;
+  pointer-events: none; z-index: 15;
   box-shadow: inset 0 0 24px rgba(255, 70, 60, .55), 0 0 18px rgba(255, 70, 60, .35);
   animation: dangerPulse 1.6s ease-in-out infinite;
 }
@@ -345,7 +345,7 @@ button.primary {
 .bgcell.pin { box-shadow: inset 0 0 0 2px #ff7ac8; background: rgba(255,122,200,.14); }
 .bgcell.tri { box-shadow: inset 0 0 0 2px #58e0d0; background: rgba(88,224,208,.14); }
 .cellmark {
-  position: absolute; z-index: 6; pointer-events: none;
+  position: absolute; z-index: 12; pointer-events: none; /* above stacked tiles (z ≤ 10) */
   display: inline-flex; align-items: center; gap: 2px;
   font-size: 10px; font-weight: 800; line-height: 1;
   background: rgba(18, 12, 38, .92); border-radius: 8px; padding: 2px 5px;
@@ -354,11 +354,23 @@ button.primary {
 .cellmark.pinata { border: 1px solid #ff7ac8; color: #ffb3de; }
 .cellmark.triple { border: 1px solid #58e0d0; color: #8df0e4; }
 
-.tile { position: absolute; padding: 2.5px; transition: transform .22s cubic-bezier(.3,.7,.35,1.1); will-change: transform; }
-/* slot art inside a tile: rendered AS-IS — the CSS plate disappears under it */
-.piece-img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.tile { position: absolute; padding: 0; transition: transform .22s cubic-bezier(.3,.7,.35,1.1); will-change: transform; }
+/* stacked-volume piece art (CD, 2026-08-31): the square asset carries a top
+   face + bottom lip, so it renders ~17% taller than its cell — the lip
+   overhangs into the row below, and per-row z-order (set inline) lets upper
+   tiles rest on the ones beneath. */
+.piece-img {
+  position: absolute; left: -3%; top: 0; width: 106%; height: 117%;
+  object-fit: fill; pointer-events: none;
+}
+/* special glyphs paint OVER the coloured base tile, centered on its face */
+.sp-img {
+  position: absolute; left: 19%; top: 12%; width: 62%; height: 62%;
+  object-fit: contain; pointer-events: none; z-index: 1;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35));
+}
 .tin.skinned { background: none; box-shadow: none; }
-.tin.sp.skinned { box-shadow: 0 0 10px rgba(255, 255, 255, .5); } /* keep the special glow for readability */
+.tin.sp.skinned { box-shadow: none; }
 .cellmark .mark-img { width: 14px; height: 14px; object-fit: contain; }
 .bgcell .skin-img { width: 68%; height: 68%; }
 .tin {
@@ -411,7 +423,7 @@ button.primary {
   100% { transform: scale(0); opacity: 0; filter: brightness(2.5); }
 }
 .particle {
-  position: absolute; z-index: 6; pointer-events: none;
+  position: absolute; z-index: 13; pointer-events: none;
   width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
   box-shadow: 0 0 6px var(--glow);
   animation: partFly .5s ease-out forwards;
@@ -435,7 +447,7 @@ button.primary {
   100% { filter: brightness(1); transform: scale(1); }
 }
 .wavefx {
-  position: absolute; z-index: 7; pointer-events: none;
+  position: absolute; z-index: 14; pointer-events: none;
   border: 3px solid rgba(255,210,120,.9); border-radius: 50%;
   box-shadow: 0 0 12px rgba(255,180,80,.6), inset 0 0 12px rgba(255,180,80,.4);
   transform: scale(.12); opacity: 0;
@@ -484,7 +496,7 @@ button.primary {
 .fx {
   position: absolute; transform: translate(-50%, -50%); pointer-events: none;
   font-weight: 800; font-size: 17px; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.8);
-  animation: floatUp .8s ease-out forwards; z-index: 5;
+  animation: floatUp .8s ease-out forwards; z-index: 13;
 }
 .fx.gold { color: var(--gold); text-shadow: 0 2px 6px rgba(0,0,0,.8), 0 0 12px rgba(255,213,74,.45); }
 .fx.big { font-size: 24px; }
@@ -506,7 +518,7 @@ button.primary {
 
 .callouts {
   position: absolute; top: 34%; left: 0; right: 0; display: flex;
-  flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 20;
+  flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 24;
 }
 .callout {
   font-family: var(--font-display); font-weight: 400;

@@ -854,22 +854,27 @@ function Board({ G }) {
     const tileStyle = { transform: `translate(${c * cell}px,${y}px)`, width: cell + 'px', height: cell + 'px' };
     // falling tiles: duration scales with drop distance, spring easing lands with a bounce
     if (t.fallDist) tileStyle.transition = `transform ${G.fallDur(t.fallDist)}ms cubic-bezier(.22,.9,.28,1.4)`;
-    // slot art per tile kind: CD art renders AS-IS (no plate, no tint behind
-    // it — match-quest rule); missing slots keep the emoji/CSS fallback.
+    // slot art per tile kind (CD, 2026-08-31): the coloured piece art is the
+    // BASE even for specials — the special asset is a transparent glyph
+    // painted over it. Art renders as-is; missing slots keep emoji/CSS.
     const specialSlot = t.special
       ? (t.special === 'arrow' ? 'special.arrow-' + (t.dir === 'h' ? 'h' : 'v') : 'special.' + t.special)
       : null;
     const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
       : t.chest ? slotImg('tile.chest', 'piece-img')
-      : t.special ? slotImg(specialSlot, 'piece-img')
       : slotImg('piece.' + SKIN.PIECE_SLOTS[t.color], 'piece-img');
+    const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
+    // stacked volume: the art's bottom lip overhangs into the row below, and
+    // upper rows draw OVER lower ones (painter's order — z falls with row)
+    tileStyle.zIndex = (G.rows - r) + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
       <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
         ${art}
+        ${spArt}
         ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
         ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
-        ${!art && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
+        ${!spArt && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
         ${(() => {
           // total value per piece: base 1 + colour boost (+ Special score when
