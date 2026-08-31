@@ -364,6 +364,10 @@ class PersistentGame extends Game {
     this.score = 0;
     this.busy = false;
     this.computeMods();
+    // Board is built BEFORE the first draft (CD, 2026-08-31): the run-start
+    // draft overlays the live board exactly like every later draft. The first
+    // pick then lands through the normal mid-run path in startLevel.
+    this.startBoard();
     this.startDraft();
   }
 
@@ -374,9 +378,10 @@ class PersistentGame extends Game {
   }
 
   // Shared pickOffer calls startLevel after every pick — the variant
-  // dispatcher. Mid-run picks mutate the LIVE board; no regeneration, ever.
+  // dispatcher. Every pick (the first included) mutates the LIVE board;
+  // no regeneration, ever.
   startLevel() {
-    if (!this.board) { this.startRun(); return; }
+    if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
     this.growBoard();
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
@@ -391,8 +396,10 @@ class PersistentGame extends Game {
     this.render();
   }
 
-  // The run's single board generation — everything after this mutates in place.
-  startRun() {
+  // The run's single board generation — runs from newRun with ZERO picks
+  // (first-pick hooks/drips land via startLevel's normal path); everything
+  // after this mutates in place.
+  startBoard() {
     this.rows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     this.cols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
     this.movesLeft = CONFIG.START_MOVES;
@@ -409,8 +416,7 @@ class PersistentGame extends Game {
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
-    this.emit('onLevelStart'); // post-remap this is spawn-once hooks only (chomper family)
-    this.dripSeedFor(this.run.picks[0]);
+    this.emit('onLevelStart'); // no-op with no picks (spawn-once hooks live on picks)
     if (!this.findAnyMove()) this.reshuffleBoard(); // placed pieces can rarely kill the only move
     this.phase = 'level';
     this.busy = false;
@@ -767,35 +773,6 @@ function DraftCard({ G, o, i }) {
   </button>`;
 }
 
-function DraftScreen({ G }) {
-  const chips = buildChips(G);
-  const cps = G.checkpoints();
-  const next = G.run.checkpointIdx < cps.length ? cps[G.run.checkpointIdx] : null;
-  return h`<div className="screen draft">
-    <div className="draft-head">
-      <div>
-        <div className="draft-sub">Draft ${G.run.level}</div>
-        <h2 className="draft-title">Pick a Spell</h2>
-      </div>
-      <${Toggle} G=${G} />
-      <${ColourToggle} G=${G} />
-    </div>
-    <p className="sub">${G.board
-      ? `Score ${G.score} — ${next !== null ? `next goal at ${next}` : 'endless chase!'} · 👟 ${G.movesLeft} moves banked`
-      : 'Pick a spell — it lasts the whole run.'}</p>
-    <div className="cards">
-      ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
-    </div>
-    ${chips.length ? h`<div className="build">
-      <div className="build-title">Your build</div>
-      <div className="chip-row">${chips.map(ch => h`<span className="chip" key=${ch.key} title=${ch.def.desc(ch.pick)}>
-        ${ch.def.icon}${ch.pick.color !== undefined ? h`<${ColorDot} color=${ch.pick.color} />` : null}${ch.count > 1 ? h`<b>×${ch.count}</b>` : null}
-      </span>`)}</div>
-    </div>` : null}
-    <div className="seedline">seed ${G.seed}</div>
-  </div>`;
-}
-
 function Board({ G }) {
   const cell = useCellSize(G.cols);
   const [sel, setSel] = React.useState(null);
@@ -1021,12 +998,12 @@ function LevelScreen({ G }) {
   </div>`;
 }
 
-// Mid-run draft: an overlay OVER the board — darkened scrim, cards on top
-// (CD, 2026-08-31). Subtitle names the goal just reached; title is the moment.
+// Every draft (run-start included) is an overlay OVER the board — darkened
+// scrim, cards on top (CD, 2026-08-31). Subtitle names the goal just reached.
 function InlineDraft({ G }) {
   return h`<div className="overlay draft-overlay">
     <div className="draft-sheet">
-      <div className="draft-sub">Goal ${G.run.checkpointIdx}</div>
+      <div className="draft-sub">${G.run.checkpointIdx > 0 ? `Goal ${G.run.checkpointIdx}` : 'The run begins'}</div>
       <div className="draft-title">Pick a Spell</div>
       <div className="cards">
         ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
@@ -1045,9 +1022,9 @@ function EndScreen({ G }) {
     catch (e) { setShowRaw(true); }
   };
   return h`<div className="screen end">
-    <h1>${win ? '🏆 Summit reached!' : '💀 Out of moves'}</h1>
+    <div className="end-sub">${win ? '🏆 Summit reached — endless chase complete!' : '💀 Out of moves'}</div>
+    <h1>Cleared ${G.run.checkpointIdx} ${G.run.checkpointIdx === 1 ? 'goal' : 'goals'}!</h1>
     <div className="end-stats">
-      <div><b>${G.run.checkpointIdx}</b> / ${CONFIG.CHECKPOINTS.length} goals cleared</div>
       <div><b>${G.score}</b> final score</div>
       <div className="seedline">seed ${G.seed}</div>
     </div>
@@ -1058,14 +1035,17 @@ function EndScreen({ G }) {
       </span>`)}</div>
     </div>` : null}
     <div className="end-buttons">
-      <button className="primary" onClick=${() => G.newRun(1 + Math.floor(Math.random() * 999999999))}>New run</button>
-      <button onClick=${() => G.newRun(G.seed)}>Replay this seed</button>
-    </div>
-    <div className="end-export">
-      <button onClick=${copy}>${copied ? '✅ Copied — send it to the designer!' : '📤 Copy my play data'}</button>
+      <button className="primary" onClick=${() => G.newRun(1 + Math.floor(Math.random() * 999999999))}>Play again</button>
+      <div className="end-secondary">
+        <button onClick=${() => G.newRun(G.seed)}>Replay this seed</button>
+        <button onClick=${copy}>${copied ? '✅ Copied' : '📤 Copy my play data'}</button>
+      </div>
       ${showRaw ? h`<textarea className="rawdata" readOnly value=${JSON.stringify(telemetryAll())}
         onFocus=${e => e.target.select()} onClick=${e => e.target.select()}></textarea>` : null}
     </div>
+    <div className="end-art">${SKIN.has('end.art')
+      ? h`<img className="skin-img" src=${SKIN.url('end.art')} alt="" />`
+      : h`<span className="end-art-label">end.art</span>`}</div>
   </div>`;
 }
 
@@ -1092,9 +1072,8 @@ function App() {
   const G = ref.current;
   let screen;
   if (G.phase === 'menu') screen = h`<${MenuScreen} G=${G} />`;
-  // Run-start draft has no board yet → full screen. Mid-run drafts render as
-  // an overlay inside LevelScreen so the board stays visible (tester feedback).
-  else if (G.phase === 'draft' && !G.board) screen = h`<${DraftScreen} G=${G} />`;
+  // Every draft — the run-start one included — renders as an overlay inside
+  // LevelScreen, so the board is always in view while picking.
   else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
   else screen = h`<${LevelScreen} G=${G} />`;
   // Everything lives inside the phone frame; overlays/callouts anchor to it.

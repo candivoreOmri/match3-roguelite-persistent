@@ -137,7 +137,6 @@ button.primary {
 }
 
 /* ------- draft ------- */
-.draft-head { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
 .cards { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 380px; }
 /* draft card (CD, 2026-08-31): big icon LEFT, name + desc right, ribbon tag */
 .card {
@@ -494,12 +493,26 @@ button.primary {
 @keyframes panelIn { from { transform: scale(.8); opacity: 0; } }
 .panel p { color: var(--text-dim); font-size: 14px; }
 
-.end { justify-content: center; }
-.end-stats { display: flex; flex-direction: column; gap: 6px; align-items: center; margin: 14px 0 6px; font-size: 15px; color: var(--text-mid); }
-.end-stats b { color: #fff; font-size: 19px; }
-.end-buttons { display: flex; gap: 10px; margin-top: 22px; }
-.end-export { margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; max-width: 380px; }
-.end-export button { font-size: 13px; padding: 8px 14px; color: var(--text-mid); }
+.end { justify-content: flex-start; padding-top: 56px; }
+.end-sub {
+  font-size: 13px; font-weight: 800; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px;
+}
+.end-stats { display: flex; flex-direction: column; gap: 6px; align-items: center; margin: 10px 0 6px; font-size: 15px; color: var(--text-mid); }
+.end-stats b { color: #fff; font-size: 21px; }
+.end-buttons { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; width: 100%; max-width: 380px; }
+.end-buttons .primary { min-width: 220px; }
+.end-secondary { display: flex; gap: 8px; }
+.end-secondary button { font-size: 12px; padding: 7px 12px; border-radius: 10px; color: var(--text-dim); }
+/* art panel pinned to the frame bottom — CD art lands via the end.art slot */
+.end-art {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 250px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: linear-gradient(180deg, rgba(23, 17, 48, 0), rgba(139, 92, 246, .12));
+  border-top: 1px dashed var(--border-strong);
+}
+.end-art .skin-img { object-fit: cover; }
+.end-art-label { font-family: monospace; font-size: 12px; letter-spacing: .12em; color: var(--text-ghost); }
 
 .endless { color: #ff9d4d; font-weight: 800; letter-spacing: .5px; }
 
@@ -519,7 +532,5 @@ button.primary {
   font-family: var(--font-display); font-weight: 400;
   text-align: center; font-size: 28px; color: #fff; margin-top: -6px;
 }
-.draft-head .draft-sub { text-align: left; }
-.draft-head .draft-title { text-align: left; margin: 0; }
 .movecap { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .fill-fill.sfill { background: linear-gradient(90deg, #58a6ff, #bfe3ff); }

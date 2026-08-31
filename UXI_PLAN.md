@@ -58,6 +58,16 @@ the CD (2026-08-31):
 - Board: external frame; every cell carries its own inner frame (visible grid).
 - All title-font text: 1px black outline (text-stroke) + 1px/1px drop shadow.
 
+## CD adjustments — round 3 (2026-08-31, done)
+
+- The run-start draft uses the same overlay as every other draft — the board
+  is now generated in `newRun` BEFORE the first pick, so it's visible behind
+  the scrim (subtitle: "The run begins"; the full-screen DraftScreen is gone).
+- End screen: "Cleared X goals!" title with a win/loss subtitle above it,
+  "Play again" as the primary CTA, secondary buttons (replay seed / copy data)
+  smaller and below it, and an `end.art` slot panel pinned to the frame bottom
+  for CD art.
+
 ## What already works (do not redo)
 
 | Thing | Notes |
