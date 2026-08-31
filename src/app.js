@@ -15,16 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 9, // v9: chomper food tiles (+bonus, respawn once) + animated board expansion (fills naturally, cascades allowed)
-
-  // Chomper food: cell-layer snacks only Chomper can consume, paying
-  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
-  // while Chomper is in the build — every eaten snack is replaced at a
-  // random valid interior cell the same move. Buffet adds more (stacks).
-  CHOMPER_FOOD_BONUS: 20,
-  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
-  CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
-  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
+  BALANCE_VERSION: 17, // v17: chomper food + animated expansion + constant snacks + Buffet (on the v16 checkpoint ease)
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -46,7 +37,11 @@ const CONFIG = {
   // a persistent board, so grants track observed per-segment need and the
   // middle checkpoints rose ~10%. Victory-lap grant halved (endless economy
   // self-extends: refunds/momentum/chests stretched 16 into 40-60-move laps).
-  CHECKPOINTS: [80, 250, 520, 900, 1500, 2500],
+  // v16 ease from live-v8 telemetry (124 segments): the v6 grant cuts made
+  // segments 2-3 a wall (45/46% clear, median 4 moves/segment played at ≤3
+  // left). Omri chose to ease CHECKPOINTS only, grants untouched: seg2 delta
+  // 170→150, seg3 270→220, all later segment DELTAS preserved exactly.
+  CHECKPOINTS: [80, 230, 450, 830, 1430, 2430],
   START_MOVES: 10,                 // opening move pool
   // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
   // each segment's grant now sits ~2 under its observed median moves-used,
