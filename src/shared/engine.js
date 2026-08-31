@@ -116,6 +116,9 @@ class Game {
   // his prey rules live in chomperMove.
   protectedTile(t) { return !!(t && (t.chest || t.chomper)); }
 
+  // Seam for variants: tiles the player can never swap. Base: chomper only.
+  immovableTile(t) { return !!(t && t.chomper); }
+
   emptyMods() {
     return { boosts: {}, bombChance: 0, autoExplode: false, countdown: false,
              blastBonus: 0, specialScore: 0, expandRows: 0, expandCols: 0,
@@ -442,7 +445,7 @@ class Game {
       for (const [dr, dc] of offsets) {
         const r2 = r + dr, c2 = c + dc;
         if (r2 >= this.rows || c2 < 0 || c2 >= this.cols || !b[r][c] || !b[r2][c2]) continue;
-        if (b[r][c].chomper || b[r2][c2].chomper) continue; // chomper can't be swapped
+        if (this.immovableTile(b[r][c]) || this.immovableTile(b[r2][c2])) continue; // immovable pieces can't be swapped
         // adjacent specials can always merge
         if (b[r][c].special && b[r2][c2].special) return { a: { r, c }, b: { r: r2, c: c2 } };
         [b[r][c], b[r2][c2]] = [b[r2][c2], b[r][c]];
@@ -972,7 +975,7 @@ class Game {
         const k = K(nr, nc);
         if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) break;
         const prey = this.board[nr][nc];
-        if (prey && (prey.chomper || prey.chest)) break;
+        if (prey && this.protectedTile(prey)) break; // he can't eat protected pieces
         s.t.chomp = true;
         const tile = s.t;
         setTimeout(() => { delete tile.chomp; this.render(); }, 500);
@@ -1080,7 +1083,7 @@ class Game {
     if (a.r < 0 || a.r >= this.rows || a.c < 0 || a.c >= this.cols) return;
     if (b.r < 0 || b.r >= this.rows || b.c < 0 || b.c >= this.cols) return;
     if (!this.board[a.r][a.c] || !this.board[b.r][b.c]) return;
-    if (this.board[a.r][a.c].chomper || this.board[b.r][b.c].chomper) return; // chomper can't be swapped
+    if (this.immovableTile(this.board[a.r][a.c]) || this.immovableTile(this.board[b.r][b.c])) return; // immovable pieces can't be swapped
     this.busy = true;
     this.swapTiles(a, b);
     this.render(); await this.sleep(CONFIG.SWAP_MS);
