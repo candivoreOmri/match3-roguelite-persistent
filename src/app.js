@@ -859,9 +859,12 @@ function Board({ G }) {
     const specialSlot = t.special
       ? (t.special === 'arrow' ? 'special.arrow-' + (t.dir === 'h' ? 'h' : 'v') : 'special.' + t.special)
       : null;
+    // boosted colours swap to their lit-up sprite variant (CD, 2026-08-31)
+    const pieceSlot = 'piece.' + SKIN.PIECE_SLOTS[t.color];
     const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
       : t.chest ? slotImg('tile.chest', 'piece-img')
-      : slotImg('piece.' + SKIN.PIECE_SLOTS[t.color], 'piece-img');
+      : ((G.mods.boosts[t.color] || 0) > 0 && slotImg(pieceSlot + '.boosted', 'piece-img'))
+        || slotImg(pieceSlot, 'piece-img');
     const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
     // stacked volume: the art's bottom lip tucks BEHIND the row below —
     // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)

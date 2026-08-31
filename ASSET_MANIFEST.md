@@ -43,6 +43,7 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | Slot | Replaces | Spec |
 | --- | --- | --- |
 | `piece.red` `piece.yellow` `piece.green` `piece.blue` `piece.purple` `piece.orange` | CSS-gradient tiles (`.bg0`–`.bg5`) | 256×256; colour order matches `.bg0`–`.bg5` |
+| `piece.<colour>.boosted` (×6, `pieces/<colour>-boosted.png`) | lit-up variant shown when that colour is boosted | 256×256; placeholder is auto-derived from the base piece (brightness + sheen) — replace with a real sprite anytime |
 | `special.arrow-h` `special.arrow-v` | ↔️ / ↕️ overlay | 256×256, rendered AS-IS (never tinted) |
 | `special.lightning` | ⚡ overlay | 256×256, as-is |
 | `special.bomb` | 💣 overlay | 256×256, as-is |

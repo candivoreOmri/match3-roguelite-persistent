@@ -121,6 +121,23 @@ def piece(slot, colour):
                       fill=(255, 255, 255, 200), outline=(0, 0, 0, 60))
     return label(img, slot)
 
+def boosted_piece(colour):
+    """Lit-up variant for boosted colours, DERIVED from the current piece art
+    (CD art included) — brightness + saturation lift + a soft top glow. The
+    CD replaces it with a real sprite whenever; the ledger then protects it."""
+    from PIL import ImageEnhance
+    src = Image.open(os.path.join(A, f'pieces/{colour}.png')).convert('RGBA')
+    rgb, alpha = src.convert('RGB'), src.split()[3]
+    rgb = ImageEnhance.Brightness(rgb).enhance(1.30)
+    rgb = ImageEnhance.Color(rgb).enhance(1.15)
+    img = Image.merge('RGBA', (*rgb.split(), alpha))
+    glow = Image.new('RGBA', src.size, (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse([28, -40, src.width - 28, src.height * 0.55],
+                                 fill=(255, 255, 235, 70))
+    img.alpha_composite(glow)
+    img.putalpha(alpha)  # glow never spills outside the piece silhouette
+    return img
+
 # ------------------------------------------------------------- emoji tile
 def emoji_tile(slot, ch, bg=None, border=None, px=150):
     img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
@@ -247,6 +264,9 @@ def main():
 
     for colour in PIECE_GRADS:
         jobs[f'piece.{colour}'] = (f'pieces/{colour}.png', lambda s=f'piece.{colour}', c=colour: piece(s, c))
+    for colour in PIECE_GRADS:  # separate pass: derives from the (possibly CD) piece files
+        jobs[f'piece.{colour}.boosted'] = (f'pieces/{colour}-boosted.png',
+                                           lambda c=colour: boosted_piece(c))
     dark = ((43, 33, 86), (24, 18, 52))
     for slot, ch in [('special.arrow-h', '↔️'), ('special.arrow-v', '↕️'),
                      ('special.lightning', '⚡'), ('special.bomb', '💣')]:
