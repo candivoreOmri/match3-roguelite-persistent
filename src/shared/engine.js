@@ -119,6 +119,11 @@ class Game {
   // Seam for variants: tiles the player can never swap. Base: chomper only.
   immovableTile(t) { return !!(t && t.chomper); }
 
+  // Seam for variants: tiles gravity never moves — they hang in place, tiles
+  // above them stack on top, and slots beneath them stay EMPTY (refills only
+  // enter a column from the top). Base: none.
+  gravityFixed(t) { return false; }
+
   emptyMods() {
     return { boosts: {}, bombChance: 0, autoExplode: false, countdown: false,
              blastBonus: 0, specialScore: 0, expandRows: 0, expandCols: 0,
@@ -828,6 +833,12 @@ class Game {
       let write = this.rows - 1;
       for (let r = this.rows - 1; r >= 0; r--) {
         const t = this.board[r][c];
+        if (t && this.gravityFixed(t)) {
+          // fixed tile: nothing falls past it — slots left beneath it stay
+          // empty, and compaction restarts in the segment above
+          write = r - 1;
+          continue;
+        }
         if (t) {
           if (write !== r) {
             t.fallDist = write - r; // drives per-tile duration + bounce easing
@@ -837,7 +848,7 @@ class Game {
           write--;
         }
       }
-      const newCount = write + 1;
+      const newCount = write + 1; // refills only reach the column's top segment
       for (let r = write; r >= 0; r--) {
         const t = this.makeRefillTile(r, c);
         t.enter = r - newCount; // start above the board, then fall in

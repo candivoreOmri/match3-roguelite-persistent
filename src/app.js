@@ -49,7 +49,7 @@ const CONFIG = {
   // moves from death. v6: 20 → 16 (Omri: still too little danger); with the
   // v6 grants (max 13) a tight crossing still fits, stacked surpluses don't.
   MAX_MOVES: 16,
-  SQUARE_BONUS_POINTS: 10,         // square bonus upgrade: flat points per square match
+  SQUARE_BONUS_MULTIPLIER: 2,      // square bonus upgrade: the 4 square tiles score ×this (all bonuses included)
   CHOMPER_WRAP: true,  // edges wrap Pac-Man style; false = stay in place at edges
 
   // Remote telemetry sink — SHARED table with the base game (records separate
@@ -352,6 +352,33 @@ POWERUPS.chomper.desc = () => `A hungry critter roams the board — after each m
 // 1-move scorch — this only touches the trail. Override is in
 // PersistentGame.backfillChomperTrail below.
 POWERUPS.spicytrail.desc = () => 'Tiles Chomper leaves behind stay scorched until matched — matching one sets off a small blast';
+
+// v10 Square bonus rework: flat +10 → the 4 square-match tiles score
+// ×SQUARE_BONUS_MULTIPLIER at their full per-tile value (colour boost,
+// special score, and the run multiplier all included, since addBonus feeds
+// the same ×multiplier pipeline). Tiles beyond the square — merged straight
+// runs, cascades, explosions — score normally.
+Object.assign(POWERUPS.squarescore, {
+  desc: () => `The 4 tiles of a square match score ×${CONFIG.SQUARE_BONUS_MULTIPLIER} (all bonuses included)`,
+  onMatch(g, p, group, api) {
+    if (!group.square || group._sqPaid) return;
+    group._sqPaid = true;
+    // locate the 2×2(s) inside the group — it may be merged with straight runs
+    const sq = new Set();
+    for (const cl of group.cells) {
+      const quad = [[cl.r, cl.c], [cl.r, cl.c + 1], [cl.r + 1, cl.c], [cl.r + 1, cl.c + 1]];
+      if (quad.every(([r, c]) => group.cellSet.has(K(r, c)))) quad.forEach(([r, c]) => sq.add(K(r, c)));
+    }
+    let extra = 0;
+    for (const k of sq) {
+      const [r, c] = k.split(',').map(Number);
+      const t = g.board[r][c];
+      if (!t) continue;
+      extra += 1 + (g.mods.boosts[t.color] || 0) + (t.special ? g.mods.specialScore : 0);
+    }
+    if (extra) api.addBonus(extra * (CONFIG.SQUARE_BONUS_MULTIPLIER - 1));
+  },
+});
 
 // v6 Blast radius: only offered once something in the build MAKES bombs
 // (Bomb chance / Square bomb / Bomb trail) — a bigger boom needs a bomb
@@ -713,6 +740,7 @@ class PersistentGame extends Game {
      clears/transforms, unswappable, walls for Chomper; they ride gravity. */
   protectedTile(t) { return super.protectedTile(t) || !!(t && t.blocker); }
   immovableTile(t) { return super.immovableTile(t) || !!(t && t.blocker); }
+  gravityFixed(t) { return !!(t && t.blocker); } // blockers hang in place; holes persist beneath them
 
   blockerCount(type) {
     let n = 0;
@@ -739,7 +767,28 @@ class PersistentGame extends Game {
   processStep(groups, swapCells, seeds, boardClears = []) {
     const res = super.processStep(groups, swapCells, seeds, boardClears);
     if (groups.length) this.blockerMatchEffects(groups);
+    this.blockerExplosionEffects(res);
     return res;
+  }
+
+  // Special-piece explosions AFFECT blockers (they still aren't cleared by
+  // them): a blast covering a box deals 1 hit, water in the blast is removed
+  // (chain rule applies), and a safe lights the exploding special's colour.
+  // Runs before applyStep, so exploding specials are still on the board.
+  blockerExplosionEffects(res) {
+    const hit = new Set(); // one effect per blocker per step
+    for (const { r, c, explosion } of res.cleared.values()) {
+      const t = this.board[r][c];
+      if (!t || !t.special) continue; // every cleared special explodes (invariant)
+      for (const cl of this.explosionCells(r, c, t)) {
+        const b = this.board[cl.r][cl.c];
+        if (!b || !b.blocker || hit.has(b.id)) continue;
+        hit.add(b.id);
+        if (b.blocker === 'water') this.removeWaterChain(cl.r, cl.c);
+        else if (b.blocker === 'box') this.damageBox(cl.r, cl.c, b);
+        else if (b.blocker === 'safe') this.lightSafe(cl.r, cl.c, b, t.color);
+      }
+    }
   }
 
   blockerNeighbors(group) {
@@ -764,34 +813,38 @@ class PersistentGame extends Game {
         }
         if (!g.active || hitOnce.has(t.id)) continue; // boxes/safes: player matches only
         hitOnce.add(t.id);
-        if (t.blocker === 'box') {
-          t.hits--;
-          this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
-          this.doShake(4);
-          if (t.hits <= 0) { // breaks open: a bomb sits where the box was
-            this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
-                                 special: 'bomb', dir: null,
-                                 countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
-            this.segBlockers.box++;
-            this.callout('📦 Box cracked — bomb inside!');
-          }
-        } else if (t.blocker === 'safe') {
-          if (g.color >= 0 && !t.lit.includes(g.color)) {
-            t.lit.push(g.color);
-            this.addFx(r, c, '🔓', 'emoji');
-            const need = Math.min(CONFIG.BLOCKER_COLOR_SAFE_COLORS_REQUIRED, this.opts.colours);
-            if (t.lit.length >= need) { // opens: a lightning sits where the safe was
-              this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
-                                   special: 'lightning', dir: null,
-                                   countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
-              this.segBlockers.safe++;
-              this.callout('🔓 Safe opened — lightning inside!');
-              this.doShake(8);
-              this.addWave(r, c, 4, 0);
-            }
-          }
-        }
+        if (t.blocker === 'box') this.damageBox(r, c, t);
+        else if (t.blocker === 'safe') this.lightSafe(r, c, t, g.color);
       }
+    }
+  }
+
+  damageBox(r, c, t) {
+    t.hits--;
+    this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
+    this.doShake(4);
+    if (t.hits <= 0) { // breaks open: a bomb sits where the box was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'bomb', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.box++;
+      this.callout('📦 Box cracked — bomb inside!');
+    }
+  }
+
+  lightSafe(r, c, t, color) {
+    if (color === undefined || color === null || color < 0 || t.lit.includes(color)) return;
+    t.lit.push(color);
+    this.addFx(r, c, '🔓', 'emoji');
+    const need = Math.min(CONFIG.BLOCKER_COLOR_SAFE_COLORS_REQUIRED, this.opts.colours);
+    if (t.lit.length >= need) { // opens: a lightning sits where the safe was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'lightning', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.safe++;
+      this.callout('🔓 Safe opened — lightning inside!');
+      this.doShake(8);
+      this.addWave(r, c, 4, 0);
     }
   }
 
