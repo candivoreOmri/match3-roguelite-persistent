@@ -39,6 +39,23 @@ trap 'rm -rf "$TMP"' EXIT
   done
   echo '</style></head><body>'
   echo '<div id="root"></div>'
+  # skin assets: the single-file bundle can't fetch skin.json or the PNGs, so
+  # inline the whole manifest as data URIs — skin.js reads window.__SKIN_INLINE__
+  # before falling back to the XHR. Must come BEFORE skin.js in the bundle.
+  echo '<script>'
+  python3 - "$SRC/assets" <<'PY'
+import base64, json, mimetypes, os, sys
+A = sys.argv[1]
+slots = json.load(open(os.path.join(A, 'skin.json')))['slots']
+out = {}
+for slot, rel in slots.items():
+    p = os.path.join(A, rel)
+    if os.path.exists(p):
+        mime = mimetypes.guess_type(p)[0] or 'image/png'
+        out[slot] = 'data:%s;base64,%s' % (mime, base64.b64encode(open(p, 'rb').read()).decode())
+print('window.__SKIN_INLINE__=' + json.dumps({'slots': out}) + ';')
+PY
+  echo '</script>'
   for f in "$SRC/skin.js" "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
     echo '<script>'
     cat "$f"
