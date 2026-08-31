@@ -644,8 +644,9 @@ class PersistentGame extends Game {
 const h = htm.bind(React.createElement);
 
 function useCellSize(cols) {
-  // board sizes to the phone frame (.phone, 402px), not the raw viewport
-  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 402) - 28) / cols)));
+  // board sizes to the phone frame (.phone, 430px), not the raw viewport;
+  // the 46px offset covers screen padding + the board's external frame
+  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 430) - 46) / cols)));
   const [s, setS] = React.useState(calc);
   React.useEffect(() => {
     const f = () => setS(calc());
@@ -751,30 +752,39 @@ function ColorDot({ color }) {
   return h`<span className=${'dot bg' + color}></span>`;
 }
 
+// Shared draft card (CD, 2026-08-31): big icon on the LEFT, name (title font)
+// + description to the right, cluster tag as a ribbon off the right edge.
+function DraftCard({ G, o, i }) {
+  const def = POWERUPS[o.id];
+  return h`<button className="card" onClick=${() => G.pickOffer(i)}>
+    <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
+    <div className="card-main">
+      <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-desc">${def.desc(o)}</div>
+    </div>
+    <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
+    ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
+  </button>`;
+}
+
 function DraftScreen({ G }) {
   const chips = buildChips(G);
   const cps = G.checkpoints();
   const next = G.run.checkpointIdx < cps.length ? cps[G.run.checkpointIdx] : null;
   return h`<div className="screen draft">
     <div className="draft-head">
-      <h2>Draft ${G.run.level}</h2>
+      <div>
+        <div className="draft-sub">Draft ${G.run.level}</div>
+        <h2 className="draft-title">Pick a Spell</h2>
+      </div>
       <${Toggle} G=${G} />
       <${ColourToggle} G=${G} />
     </div>
     <p className="sub">${G.board
       ? `Score ${G.score} — ${next !== null ? `next goal at ${next}` : 'endless chase!'} · 👟 ${G.movesLeft} moves banked`
-      : 'Pick a power-up — it lasts the whole run.'}</p>
+      : 'Pick a spell — it lasts the whole run.'}</p>
     <div className="cards">
-      ${G.offers.map((o, i) => {
-        const def = POWERUPS[o.id];
-        return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
-          <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
-          <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
-          <div className="card-desc">${def.desc(o)}</div>
-          <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
-          ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
-        </button>`;
-      })}
+      ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
     </div>
     ${chips.length ? h`<div className="build">
       <div className="build-title">Your build</div>
@@ -973,27 +983,31 @@ function LevelScreen({ G }) {
   const pct = next !== null ? Math.max(0, Math.min(100, ((G.score - prev) / (next - prev)) * 100)) : 100;
   const cp = G.lastCheckpoint;
   return h`<div className="screen level-screen">
-    <div className="hud">
-      <div className=${'hud-moves-box' + (G.movesLeft <= 3 ? ' low' : '')}>
-        <span className="hmb-ic">👟</span>
-        <b>${G.movesLeft}</b>
-        <span className="movecap">/${CONFIG.MAX_MOVES}</span>
+    <div className="board-stack">
+      <div className="hud">
+        <div className=${'hud-moves-box' + (G.movesLeft <= 3 ? ' low' : '')}>
+          <span className="hmb-label">Moves</span>
+          <b className="hmb-num">${G.movesLeft}</b>
+          <span className="movecap">MAX ${CONFIG.MAX_MOVES}</span>
+        </div>
+        <div className="hud-goal">
+          <div className="goal-row">${cps.map((v, i) => h`<span key=${i} title=${v}
+            className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
+          <div className="bar goalbar">
+            <div className="fill" style=${{ width: pct + '%' }}></div>
+            <div className="bar-label">${next !== null
+              ? `${Math.max(0, G.score - prev)} / ${next - prev}`
+              : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
+          </div>
+        </div>
+        ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
+          onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
-      <div className="hud-goal">
-        <div className="goal-row">${cps.map((v, i) => h`<span key=${i} title=${v}
-          className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
-        <div className="bar goalbar"><div className="fill" style=${{ width: pct + '%' }}></div></div>
-        <div className="nums">${next !== null
-          ? `${Math.max(0, G.score - prev)} / ${next - prev}`
-          : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
-      </div>
-      ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
-        onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
+      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
+      <${FillupMeter} G=${G} />
+      <${MomentumMeter} G=${G} />
+      <${SnowballMeter} G=${G} />
     </div>
-    <${FillupMeter} G=${G} />
-    <${MomentumMeter} G=${G} />
-    <${SnowballMeter} G=${G} />
-    <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
     <${PowerBar} G=${G} />
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
@@ -1008,22 +1022,14 @@ function LevelScreen({ G }) {
 }
 
 // Mid-run draft: an overlay OVER the board — darkened scrim, cards on top
-// (CD, 2026-08-31; replaces the under-the-board inline strip).
+// (CD, 2026-08-31). Subtitle names the goal just reached; title is the moment.
 function InlineDraft({ G }) {
   return h`<div className="overlay draft-overlay">
     <div className="draft-sheet">
-      <div className="draft-inline-title">Draft ${G.run.level} — pick a power-up</div>
+      <div className="draft-sub">Goal ${G.run.checkpointIdx}</div>
+      <div className="draft-title">Pick a Spell</div>
       <div className="cards">
-        ${G.offers.map((o, i) => {
-          const def = POWERUPS[o.id];
-          return h`<button className="card" key=${i} onClick=${() => G.pickOffer(i)}>
-            <div className="card-icon">${def.icon}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
-            <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
-            <div className="card-desc">${def.desc(o)}</div>
-            <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
-            ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
-          </button>`;
-        })}
+        ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
       </div>
     </div>
   </div>`;

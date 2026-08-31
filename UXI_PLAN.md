@@ -44,6 +44,20 @@ the CD (2026-08-31):
    cleared, glowing number for the current one); moves live in their own
    container on the LEFT of the HUD.
 
+## CD adjustments — round 2 (2026-08-31, done)
+
+- Phone frame enlarged to 430×932; key text sizes scaled up with it.
+- Level layout: board group (HUD + board + power-up meters) centered in the
+  frame — moves box + goal bar attach to the board's top, meters to its bottom;
+  power-up chips are much bigger and pinned to the frame's bottom, with the
+  pressed chip's explanation floating above as a tooltip (no layout push).
+- Moves box: "Moves" label (no shoe icon), the number in the title font,
+  "MAX 16" beneath. Score number rides ON the goal bar; both bigger/thicker.
+- Draft window: "Goal X" subtitle over a "Pick a Spell" title; cards are
+  icon-left with title-font names and cluster tags as right-edge ribbons.
+- Board: external frame; every cell carries its own inner frame (visible grid).
+- All title-font text: 1px black outline (text-stroke) + 1px/1px drop shadow.
+
 ## What already works (do not redo)
 
 | Thing | Notes |
