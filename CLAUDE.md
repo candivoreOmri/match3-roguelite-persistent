@@ -3,9 +3,11 @@
 Vanilla JS, no build step, no npm. React UMD + htm are vendored in `src/vendor/`.
 
 This is the **persistent-board variant**: no levels — ONE board per run, one run-long
-bar with cumulative score checkpoints (draft + move grant on crossing; endless chase
-after the final flag). Special cells/chests DRIP in per move (`CONFIG.DRIP`), never
-seeded per level. Telemetry key `rl_persistent_telemetry_v1` (`variant:'persistent'`).
+bar with cumulative score checkpoints (draft + move grant on crossing). Since v10 the
+run ENDS when the final checkpoint is crossed — leftover moves are the prize (1 die
+each), not a springboard for more score. Special cells/chests DRIP in per move
+(`CONFIG.DRIP`), never seeded per level. Telemetry key `rl_persistent_telemetry_v1`
+(`variant:'persistent'`).
 
 ## Running locally
 
@@ -67,6 +69,8 @@ is a future feature, as is the power-up unlock/reveal screen.
   that goes in `src/app.js`. If you change `shared/`, flag it in the PR so the same
   change lands in the sibling repo.
 - Score economy is 1 point per piece; don't hand-tune targets.
-- Reaching a checkpoint never ends a run early — the player always plays on.
+- Intermediate checkpoints never end a run early — but since v10 the FINAL checkpoint
+  DOES end the run (a win), converting leftover moves to dice. Don't reintroduce the
+  endless score chase.
 - The game should feel **juicy**: animation, particles, floating callouts, screen
   shake. Match that bar for any new mechanic or visual change.

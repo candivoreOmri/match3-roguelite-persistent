@@ -580,6 +580,8 @@ button.primary.danger { background: linear-gradient(135deg, #ff5a4c, #b3261e); b
   padding: 9px 16px; font-size: 14px; font-weight: 700; margin-top: 10px; text-align: center;
 }
 .end-boss.lost { background: #2c1614; border-color: #ff5a4c; color: #ffb3ac; }
+.end-spare { font-size: 14px; }
+.end-spare b { color: #7ac0ff; font-size: 17px; }
 .end-dice { font-size: 14px; }
 .end-dice.won b { color: #ffd54a; font-size: 17px; }
 .end-dice-total { color: #7b8194; font-size: 12px; }

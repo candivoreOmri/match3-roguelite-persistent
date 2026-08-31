@@ -6,8 +6,10 @@
    PersistentGame subclass (checkpoint run flow + per-move drip), and the UI.
 
    Variant rules recap: ONE board per run (never regenerates), one run-long
-   bar with cumulative score checkpoints — crossing pays moves + a draft;
-   endless score chase past the final flag; loss only at 0 moves.
+   bar with cumulative score checkpoints — crossing pays moves + a draft.
+   v10: crossing the FINAL checkpoint ends the run as a win, and the moves
+   you didn't need pay out as dice — leftover moves are the goal, not score.
+   Loss only at 0 moves before the final flag.
    NEVER edit shared/* for variant-only behaviour — override here instead.
    ========================================================================== */
 'use strict';
@@ -15,7 +17,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 9, // v9: board-game meta layer — dice economy, run modifiers, world-gated power-up batches
+  BALANCE_VERSION: 10, // v10: runs END at the final flag (leftover moves → dice), per-world checkpoint scale
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -37,12 +39,25 @@ const CONFIG = {
   // a persistent board, so grants track observed per-segment need and the
   // middle checkpoints rose ~10%. Victory-lap grant halved (endless economy
   // self-extends: refunds/momentum/chests stretched 16 into 40-60-move laps).
-  CHECKPOINTS: [80, 250, 520, 900, 1500, 2500],
+  // v10: crossing the LAST checkpoint ends the run — leftover moves are the
+  // prize (1 die each) — and each world has its own curve, because each world
+  // only has its unlocked power-up batches. World 1 (batch 1: no multipliers,
+  // sweeps, or spawners) is flattened AND lowered — the old curve went
+  // super-linear to chase a scaling economy that batch 1 doesn't have.
+  // Tuned with a greedy scripted bot (sensible drafts, best-immediate-match
+  // moves): ~50% win rate, 3-11 leftover moves on wins, most losses past
+  // checkpoint 3. World 2 ≈ 0.85× the full tuning (batches 1+2 hold most of
+  // the score engines); world 3 is the original v3 full-roster curve.
+  WORLD_CHECKPOINTS: [
+    [45, 120, 235, 400, 620, 900],
+    [68, 213, 442, 765, 1275, 2125],
+    [80, 250, 520, 900, 1500, 2500],
+  ],
   START_MOVES: 10,                 // opening move pool
   // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
   // each segment's grant now sits ~2 under its observed median moves-used,
   // so banked surplus + refunds/momentum have to cover the difference.
-  CHECKPOINT_MOVES: [8, 10, 11, 12, 13, 6], // granted on crossing checkpoint i (last = victory lap)
+  CHECKPOINT_MOVES: [8, 10, 11, 12, 13, 6], // granted on crossing checkpoint i (last entry unused since v10 — the final flag ends the run)
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -139,6 +154,7 @@ const CONFIG = {
   DICE_CAP: 10,                    // dice carry over between runs, up to this
   DIE_SIDES: 6,
   BOARD_SPACES: 20,                // one lap = one full loop of the board
+  STARTING_DICE: 3,                // dice a brand-new save begins with
   LAPS_TO_UNLOCK_BOSS: [5, 7, 10], // laps in-world before the boss space appears, per world
   CURRENT_WORLD: 1,                // world a fresh save starts on
   BOARD_COIN_REWARD_MIN: 10,       // coin space payout range
@@ -461,7 +477,7 @@ const META = {
     const defaults = {
       v: 1,
       world: CONFIG.CURRENT_WORLD,   // 1-based; drives batch unlocks + board theme
-      dice: 0,                       // carried between runs, capped at DICE_CAP
+      dice: CONFIG.STARTING_DICE,    // carried between runs, capped at DICE_CAP
       coins: 0,
       pos: 0,                        // token position on the 20-space loop
       laps: 0,                       // lifetime laps (display)
@@ -680,10 +696,13 @@ class PersistentGame extends Game {
     this.startDraft();
   }
 
-  // Checkpoint values, colour-scaled (cumulative run score, not per-segment).
+  // Checkpoint values: the current world's curve, colour-scaled (cumulative
+  // run score, not per-segment). The world can't change mid-run, so a live
+  // read is safe.
   checkpoints() {
     const s = CONFIG.COLOUR_TARGET_SCALE[this.opts.colours] || 1;
-    return CONFIG.CHECKPOINTS.map(v => Math.round(v * s));
+    const base = CONFIG.WORLD_CHECKPOINTS[Math.min(META.state.world, CONFIG.WORLD_CHECKPOINTS.length) - 1];
+    return base.map(v => Math.round(v * s));
   }
 
   // Shared pickOffer calls startLevel after every pick — the variant
@@ -769,13 +788,22 @@ class PersistentGame extends Game {
   }
 
   // Replaces per-level clear/loss: cross every checkpoint the score now
-  // clears (grant moves + queue drafts), otherwise check for run end.
+  // clears (grant moves + queue drafts). v10: crossing the FINAL checkpoint
+  // ENDS the run as a win — the moves you didn't need become dice, so
+  // leftover moves are the prize, not a springboard for more score.
   checkLevelEnd() {
     if (this.phase !== 'level') return;
     const cps = this.checkpoints();
     let crossed = 0, granted = 0;
     while (this.run.checkpointIdx < cps.length && this.score >= cps[this.run.checkpointIdx]) {
       const i = this.run.checkpointIdx++;
+      if (this.run.checkpointIdx >= cps.length) { // final flag — run over, bank the surplus
+        this.run.finalReached = true;
+        this.logLevel('end');
+        this.phase = 'win';
+        this.finishRunMeta(true); // dice payout (1/leftover move), boss settle, modifier expiry
+        return;
+      }
       const grant = CONFIG.CHECKPOINT_MOVES[Math.min(i, CONFIG.CHECKPOINT_MOVES.length - 1)]
                   + this.runModCpBonus(); // board modifier: +1 per Trail rations
       const before = this.movesLeft;
@@ -784,10 +812,9 @@ class PersistentGame extends Game {
       this.logLevel('clear');
       this.run.pendingDrafts++;
       this.tempoUsed = false; // Tempo re-arms for the new segment
-      if (this.run.checkpointIdx >= cps.length) this.run.finalReached = true;
     }
     if (crossed) {
-      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted, final: this.run.finalReached };
+      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted };
       this.phase = 'checkpoint';
       return;
     }
@@ -797,9 +824,9 @@ class PersistentGame extends Game {
         this.movesLeft += CONFIG.LIFESAVER_BONUS_MOVES;
         this.callout(`🛟 Lifesaver! +${CONFIG.LIFESAVER_BONUS_MOVES} moves`);
       } else {
-        this.logLevel(this.run.finalReached ? 'end' : 'loss');
-        this.phase = this.run.finalReached ? 'win' : 'loss';
-        this.finishRunMeta(this.phase === 'win'); // dice payout, boss settle, modifier expiry
+        this.logLevel('loss');
+        this.phase = 'loss';
+        this.finishRunMeta(false); // dice payout (partial clear), modifier expiry
       }
     }
   }
@@ -1300,12 +1327,12 @@ function BoardScreen({ G }) {
     let ticks = 0;
     const spin = setInterval(() => {
       setFace(1 + Math.floor(Math.random() * CONFIG.DIE_SIDES));
-      if (++ticks >= 9) {
+      if (++ticks >= 6) {
         clearInterval(spin);
         setFace(result);
-        later(() => move(result), 420);
+        later(() => move(result), 240);
       }
-    }, 75);
+    }, 55);
     timers.current.push(spin); // clearTimeout on an interval id is a no-op-safe clear in browsers
   };
 
@@ -1661,7 +1688,7 @@ function LevelScreen({ G }) {
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel">
         <h2>🚩 Checkpoint ${cp.n}${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves${cp.final ? ' — final flag planted! The endless chase begins 🔥' : ''}</p>
+        <p>+${cp.moves} moves</p>
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}
@@ -1708,8 +1735,9 @@ function EndScreen({ G }) {
     </div>` : null}
     ${G.bossRun && !win ? h`<div className="end-boss lost">👹 The boss stands. The boss space stays on the board — try again.</div>` : null}
     <div className="end-stats">
-      <div><b>${G.run.checkpointIdx}</b> / ${CONFIG.CHECKPOINTS.length} checkpoints crossed</div>
+      <div><b>${G.run.checkpointIdx}</b> / ${G.checkpoints().length} checkpoints crossed</div>
       <div><b>${G.score}</b> final score</div>
+      ${win ? h`<div className="end-spare">👟 <b>${Math.max(0, G.movesLeft)}</b> ${G.movesLeft === 1 ? 'move' : 'moves'} to spare</div>` : null}
       <div className=${'end-dice' + (rw && rw.dice > 0 ? ' won' : '')}>
         ${rw && rw.dice > 0 ? h`🎲 <b>+${rw.dice}</b> ${rw.dice === 1 ? 'die' : 'dice'} earned` : '🎲 no dice this time'}
         <span className="end-dice-total"> — ${META.state.dice}/${CONFIG.DICE_CAP} banked</span>
