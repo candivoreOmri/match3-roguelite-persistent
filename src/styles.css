@@ -86,7 +86,29 @@ body {
   .phone { width: 100vw; height: 100dvh; border-radius: 0; border: none; box-shadow: none; }
 }
 
+/* backdrop layer: CD art via the bg.main slot, CSS placeholder until then */
+.bg-main {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; pointer-events: none;
+}
+.bg-main-placeholder {
+  background:
+    radial-gradient(60% 42% at 50% 0%, rgba(139, 92, 246, .30), transparent 70%),
+    radial-gradient(52% 36% at 88% 100%, rgba(255, 122, 217, .16), transparent 70%),
+    radial-gradient(42% 30% at 8% 78%, rgba(88, 166, 255, .10), transparent 70%),
+    linear-gradient(180deg, #1c1540, #171130 45%, #120d28);
+}
+.bg-main-placeholder::after { /* faint star field */
+  content: ''; position: absolute; inset: 0; opacity: .5;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, .55) 1px, transparent 1.6px),
+    radial-gradient(circle, rgba(255, 255, 255, .30) 1px, transparent 1.6px);
+  background-size: 210px 180px, 120px 140px;
+  background-position: 24px 42px, 70px 96px;
+}
+
 .screen {
+  position: relative; z-index: 1; /* above the backdrop layer */
   height: 100%; overflow-y: auto; overflow-x: hidden;
   display: flex; flex-direction: column; align-items: center;
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
@@ -224,7 +246,15 @@ button.primary {
   font-size: 12px; font-weight: 800; line-height: 1;
   background: var(--sunken); color: var(--text-faint); border: 1px solid var(--border);
 }
-.goal-ic.done { background: var(--gold); color: #3a2b00; border-color: var(--gold); }
+.goal-ic.done {
+  background: var(--gold); color: #3a2b00; border-color: var(--gold);
+  animation: goalDone .6s cubic-bezier(.2, 1.6, .4, 1); /* pops when it flips to ✓ */
+}
+@keyframes goalDone {
+  0% { transform: scale(.3); }
+  55% { transform: scale(1.45); box-shadow: 0 0 16px rgba(255, 213, 74, .9); }
+  100% { transform: scale(1); }
+}
 .goal-ic.cur {
   background: var(--cta); color: #fff; border: none;
   box-shadow: 0 0 8px rgba(233, 95, 208, .65);
@@ -233,16 +263,26 @@ button.primary {
 @keyframes goalGlow { 50% { box-shadow: 0 0 3px rgba(233, 95, 208, .35); } }
 /* the score rides ON the bar — thicker track, label overlaid (CD, 2026-08-31) */
 .bar.goalbar { position: relative; height: 26px; border: 1px solid var(--border); border-radius: 99px; }
+.goalbar .fill { position: relative; overflow: hidden; }
+.goalbar .fill::after { /* slow magical shine sweeping the fill */
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, .34) 50%, transparent 68%);
+  background-size: 240% 100%;
+  animation: barShine 2.8s linear infinite;
+}
+@keyframes barShine { from { background-position: 190% 0; } to { background-position: -90% 0; } }
 .bar-label {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px;
   font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
   color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .85);
 }
 
-/* power-up meters: attached below the board inside the board stack */
+/* power-up meters: compact cluster attached below the board — side by side
+   when more than one is active, wrapping to a second row past two */
+.meters { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 .fillmeter {
-  width: 100%; display: flex; align-items: center; gap: 8px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px;
+  flex: 1 1 45%; min-width: 45%; display: flex; align-items: center; gap: 7px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 5px 10px;
 }
 .fill-icon { font-size: 14px; }
 .fill-bar { flex: 1; height: 7px; background: var(--sunken); border-radius: 99px; overflow: hidden; }
@@ -492,6 +532,11 @@ button.primary {
 }
 @keyframes panelIn { from { transform: scale(.8); opacity: 0; } }
 .panel p { color: var(--text-dim); font-size: 14px; }
+/* goal-cleared celebration panel: gold-edged, glowing */
+.panel.goal-panel {
+  border-color: var(--gold);
+  box-shadow: 0 0 34px rgba(255, 213, 74, .28), 0 6px 24px rgba(0, 0, 0, .4);
+}
 
 .end { justify-content: flex-start; padding-top: 56px; }
 .end-sub {

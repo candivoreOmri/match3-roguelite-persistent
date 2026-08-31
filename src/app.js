@@ -981,14 +981,16 @@ function LevelScreen({ G }) {
           onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
       <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}><${Board} G=${G} /></div>
-      <${FillupMeter} G=${G} />
-      <${MomentumMeter} G=${G} />
-      <${SnowballMeter} G=${G} />
+      <div className="meters">
+        <${FillupMeter} G=${G} />
+        <${MomentumMeter} G=${G} />
+        <${SnowballMeter} G=${G} />
+      </div>
     </div>
     <${PowerBar} G=${G} />
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
-      <div className="panel">
+      <div className="panel goal-panel">
         <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
         <p>+${cp.moves} moves${cp.final ? ' — final goal cleared! The endless chase begins 🔥' : ''}</p>
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
@@ -1077,7 +1079,13 @@ function App() {
   else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
   else screen = h`<${LevelScreen} G=${G} />`;
   // Everything lives inside the phone frame; overlays/callouts anchor to it.
-  return h`<div className="phone">${screen}</div>`;
+  // Backdrop: CD art via the bg.main slot; CSS mystical placeholder until then.
+  return h`<div className="phone">
+    ${SKIN.has('bg.main')
+      ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
+      : h`<div className="bg-main bg-main-placeholder"></div>`}
+    ${screen}
+  </div>`;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(h`<${App} />`);

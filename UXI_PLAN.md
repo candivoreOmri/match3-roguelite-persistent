@@ -137,7 +137,13 @@ Refs cite folders in `~/Desktop/uxi ref library`.
   @font-face + data-URI inlining in build.sh — **build.sh changed**, flag in
   PR); `:root` design-token layer + mystical palette applied across styles.css;
   launch.json + sync.sh dev loop. ASSET_MANIFEST.md holds the slot taxonomy.
-- [ ] Phase A
+- [x] Phase A — done 2026-08-31: mystical CSS backdrop behind everything via a
+  `bg.main`-slotted layer (CD art replaces it, placeholder = gradients + star
+  field); meters consolidated into a compact wrapping cluster; goal-bar juice
+  (shine sweep on the fill, gold pop when a badge flips to ✓, gold-glow
+  celebration panel). Typography/HUD structure landed earlier via CD rounds.
+  Remaining G4 ambition (enchanted-trail bar art) waits on ui.progressbar-*
+  / icon.flag slots.
 - [ ] Phase B
 - [ ] Phase C
 - [ ] Phase D
