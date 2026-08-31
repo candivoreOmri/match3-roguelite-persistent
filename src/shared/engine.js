@@ -110,6 +110,20 @@ class Game {
   render() { this.onRender(); }
   // fast=true skips animation delays (scripted testing; hidden tabs throttle timers)
   sleep(ms) { return this.fast ? Promise.resolve() : new Promise(res => setTimeout(res, ms)); }
+  // Seam for variants: tiles that nothing on the board may clear, recolour,
+  // or transform (board effects, explosions, floods/converter, reshuffles).
+  // Base behaviour: chests and chompers. Chomper's own eating is exempt —
+  // his prey rules live in chomperMove.
+  protectedTile(t) { return !!(t && (t.chest || t.chomper)); }
+
+  // Seam for variants: tiles the player can never swap. Base: chomper only.
+  immovableTile(t) { return !!(t && t.chomper); }
+
+  // Seam for variants: tiles gravity never moves — they hang in place, tiles
+  // above them stack on top, and slots beneath them stay EMPTY (refills only
+  // enter a column from the top). Base: none.
+  gravityFixed(t) { return false; }
+
   emptyMods() {
     return { boosts: {}, bombChance: 0, autoExplode: false, countdown: false,
              blastBonus: 0, specialScore: 0, expandRows: 0, expandCols: 0,
@@ -345,7 +359,7 @@ class Game {
     for (let tries = 0; tries < 40; tries++) {
       for (let r = 0; r < this.rows; r++)
         for (let c = 0; c < this.cols; c++)
-          if (this.board[r][c] && !this.board[r][c].chest && !this.board[r][c].chomper) this.board[r][c].color = this.rollColorAvoidingMatches(r, c);
+          if (this.board[r][c] && !this.protectedTile(this.board[r][c])) this.board[r][c].color = this.rollColorAvoidingMatches(r, c);
       if (this.findAnyMove() && !this.findGroups().length) return;
     }
   }
@@ -436,7 +450,7 @@ class Game {
       for (const [dr, dc] of offsets) {
         const r2 = r + dr, c2 = c + dc;
         if (r2 >= this.rows || c2 < 0 || c2 >= this.cols || !b[r][c] || !b[r2][c2]) continue;
-        if (b[r][c].chomper || b[r2][c2].chomper) continue; // chomper can't be swapped
+        if (this.immovableTile(b[r][c]) || this.immovableTile(b[r2][c2])) continue; // immovable pieces can't be swapped
         // adjacent specials can always merge
         if (b[r][c].special && b[r2][c2].special) return { a: { r, c }, b: { r: r2, c: c2 } };
         [b[r][c], b[r2][c2]] = [b[r2][c2], b[r][c]];
@@ -516,7 +530,7 @@ class Game {
     const addClear = (r, c, explosion, opts = {}) => {
       if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
       const t = this.board[r][c];
-      if (!t || t.chest || t.chomper) return false; // chests and chompers are indestructible
+      if (!t || this.protectedTile(t)) return false; // protected tiles are indestructible
       const k = K(r, c);
       if (cleared.has(k)) return false;
       const delay = Math.min(500, opts.delay || 0);
@@ -672,7 +686,7 @@ class Game {
           const rr = r + dr, cc = c + dc;
           if (rr < 0 || rr >= this.rows || cc < 0 || cc >= this.cols) continue;
           const t = this.board[rr][cc];
-          if (t && !t.chest && !cleared.has(K(rr, cc))) t.volatile = this.moveNum + 1;
+          if (t && !this.protectedTile(t) && !cleared.has(K(rr, cc))) t.volatile = this.moveNum + 1;
         }
       }
     }
@@ -779,7 +793,7 @@ class Game {
           if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
           seen.add(k);
           const t = this.board[r][c];
-          if (t && !t.pop && !t.chest && t.color !== f.color) cands.push({ r, c });
+          if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) cands.push({ r, c });
         }
       } else { // board-wide (Converter)
         // prefer targets that don't instantly complete a match — conversion
@@ -787,7 +801,7 @@ class Game {
         const risky = [];
         for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
           const t = this.board[r][c];
-          if (t && !t.pop && !t.chest && t.color !== f.color) {
+          if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) {
             (this.wouldMatchAt(r, c, f.color) ? risky : cands).push({ r, c });
           }
         }
@@ -819,6 +833,12 @@ class Game {
       let write = this.rows - 1;
       for (let r = this.rows - 1; r >= 0; r--) {
         const t = this.board[r][c];
+        if (t && this.gravityFixed(t)) {
+          // fixed tile: nothing falls past it — slots left beneath it stay
+          // empty, and compaction restarts in the segment above
+          write = r - 1;
+          continue;
+        }
         if (t) {
           if (write !== r) {
             t.fallDist = write - r; // drives per-tile duration + bounce easing
@@ -828,15 +848,21 @@ class Game {
           write--;
         }
       }
-      const newCount = write + 1;
-      for (let r = write; r >= 0; r--) {
+      // Refill EVERY empty slot left in the column. New tiles enter from
+      // above the board and drop past gravity-fixed tiles into the gaps
+      // beneath them — fixed tiles block FALLING tiles, never incoming
+      // fills. (No fixed tiles → empties are the contiguous top segment and
+      // this is exactly the old behaviour.)
+      const empties = [];
+      for (let r = 0; r < this.rows; r++) if (!this.board[r][c]) empties.push(r);
+      empties.forEach((r, i) => {
         const t = this.makeRefillTile(r, c);
-        t.enter = r - newCount; // start above the board, then fall in
-        t.fallDist = newCount;
-        maxFall = Math.max(maxFall, newCount);
+        t.enter = i - empties.length; // stacked above the board, in order
+        t.fallDist = r - t.enter;
+        maxFall = Math.max(maxFall, t.fallDist);
         this.board[r][c] = t;
         any = true;
-      }
+      });
     }
     if (!any) return;
     this.render(); await this.sleep(30);
@@ -966,7 +992,7 @@ class Game {
         const k = K(nr, nc);
         if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) break;
         const prey = this.board[nr][nc];
-        if (prey && (prey.chomper || prey.chest)) break;
+        if (prey && this.protectedTile(prey)) break; // he can't eat protected pieces
         s.t.chomp = true;
         const tile = s.t;
         setTimeout(() => { delete tile.chomp; this.render(); }, 500);
@@ -1031,7 +1057,7 @@ class Game {
     const cells = [];
     for (let c = 0; c < this.cols; c++) {
       const t = this.board[this.rows - 1][c];
-      if (t && !t.chest && !t.chomper) cells.push({ r: this.rows - 1, c });
+      if (t && !this.protectedTile(t)) cells.push({ r: this.rows - 1, c });
     }
     if (!cells.length) return;
     const res = this.processStep([], null, [], cells);
@@ -1074,7 +1100,7 @@ class Game {
     if (a.r < 0 || a.r >= this.rows || a.c < 0 || a.c >= this.cols) return;
     if (b.r < 0 || b.r >= this.rows || b.c < 0 || b.c >= this.cols) return;
     if (!this.board[a.r][a.c] || !this.board[b.r][b.c]) return;
-    if (this.board[a.r][a.c].chomper || this.board[b.r][b.c].chomper) return; // chomper can't be swapped
+    if (this.immovableTile(this.board[a.r][a.c]) || this.immovableTile(this.board[b.r][b.c])) return; // immovable pieces can't be swapped
     this.busy = true;
     this.swapTiles(a, b);
     this.render(); await this.sleep(CONFIG.SWAP_MS);

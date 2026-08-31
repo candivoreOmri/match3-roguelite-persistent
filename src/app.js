@@ -6,8 +6,10 @@
    PersistentGame subclass (checkpoint run flow + per-move drip), and the UI.
 
    Variant rules recap: ONE board per run (never regenerates), one run-long
-   bar with cumulative score checkpoints — crossing pays moves + a draft;
-   endless score chase past the final flag; loss only at 0 moves.
+   bar with cumulative score checkpoints — crossing pays moves + a draft.
+   v10: crossing the FINAL checkpoint ends the run as a win, and the moves
+   you didn't need pay out as dice — leftover moves are the goal, not score.
+   Loss only at 0 moves before the final flag.
    NEVER edit shared/* for variant-only behaviour — override here instead.
    ========================================================================== */
 'use strict';
@@ -15,7 +17,43 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 8, // v8: snowball split into Snow crusher (specials) + Snow painter (boosted matches), shared bar, +3/charge
+  // NOTE: the board-meta line counted v9-v14 while the blockers/food line
+  // independently counted v9-v10 — v15 is the first shared number after the
+  // two branches merged (2026-09-01).
+  BALANCE_VERSION: 15, // v15: board-meta (dice/worlds/consumables) + blockers + chomper food, merged
+
+  // Blockers: inert tiles cleared only through their own interaction (see
+  // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
+  // this branch's ongoing board generation — once run.checkpointIdx reaches
+  // its intro checkpoint; before that its chance is 0. Chances are per
+  // refill tile; caps bound how many of a type exist at once (drip-style —
+  // without them a 15% per-tile chance floods a persistent board).
+  BLOCKER_STATIC_BOX_CHANCE: 0.15,
+  BLOCKER_WATER_CHANCE: 0.08,
+  BLOCKER_COLOR_SAFE_CHANCE: 0.05,
+  // v15 merge remap: the original gates (3/5/7) were tuned for the endless
+  // pre-v10 game — runs now END at the final flag (3 flags on world-1
+  // regular runs, 6 on bosses/worlds 2-3), which made water barely reachable
+  // and safes IMPOSSIBLE. Remapped so each blocker gets real screen time in
+  // a 6-flag run; world-1 regular runs (3 flags) only ever meet the box.
+  // Needs a proper per-world design pass (flagged in the PR).
+  BLOCKER_INTRO_CHECKPOINT_BOX: 2,
+  BLOCKER_INTRO_CHECKPOINT_WATER: 3,
+  BLOCKER_INTRO_CHECKPOINT_SAFE: 4,
+  BLOCKER_STATIC_BOX_HITS: 3,
+  BLOCKER_WATER_SPREAD_INTERVAL: 1,  // water spreads every Nth player move
+  BLOCKER_COLOR_SAFE_COLORS_REQUIRED: 4, // of 5 (all of them when fewer colours are active)
+  BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
+  BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
+
+  // Chomper food: cell-layer snacks only Chomper can consume, paying
+  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
+  // while Chomper is in the build — every eaten snack is replaced at a
+  // random valid interior cell the same move. Buffet adds more (stacks).
+  CHOMPER_FOOD_BONUS: 20,
+  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
+  CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
+  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -24,7 +62,7 @@ const CONFIG = {
   // moves from death. v6: 20 → 16 (Omri: still too little danger); with the
   // v6 grants (max 13) a tight crossing still fits, stacked surpluses don't.
   MAX_MOVES: 16,
-  SQUARE_BONUS_POINTS: 10,         // square bonus upgrade: flat points per square match
+  SQUARE_BONUS_MULTIPLIER: 2,      // square bonus upgrade: the 4 square tiles score ×this (all bonuses included)
   CHOMPER_WRAP: true,  // edges wrap Pac-Man style; false = stay in place at edges
 
   // Remote telemetry sink — SHARED table with the base game (records separate
@@ -37,12 +75,56 @@ const CONFIG = {
   // a persistent board, so grants track observed per-segment need and the
   // middle checkpoints rose ~10%. Victory-lap grant halved (endless economy
   // self-extends: refunds/momentum/chests stretched 16 into 40-60-move laps).
-  CHECKPOINTS: [80, 250, 520, 900, 1500, 2500],
-  START_MOVES: 10,                 // opening move pool
-  // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
-  // each segment's grant now sits ~2 under its observed median moves-used,
-  // so banked surplus + refunds/momentum have to cover the difference.
-  CHECKPOINT_MOVES: [8, 10, 11, 12, 13, 6], // granted on crossing checkpoint i (last = victory lap)
+  // v10: crossing the LAST checkpoint ends the run — leftover moves are the
+  // prize (1 die each) — and each world has its own curve, because each world
+  // only has its unlocked power-up batches. World 1 (batch 1: no multipliers,
+  // sweeps, or spawners) is flattened AND lowered — the old curve went
+  // super-linear to chase a scaling economy that batch 1 doesn't have.
+  // Tuned with a greedy scripted bot (sensible drafts, best-immediate-match
+  // moves): ~50% win rate, 3-11 leftover moves on wins, most losses past
+  // checkpoint 3. World 2 ≈ 0.85× the full tuning (batches 1+2 hold most of
+  // the score engines); world 3 is the original v3 full-roster curve.
+  // v13: regular and boss runs have SEPARATE curves per world (v12 sliced
+  // the first 3 flags off the boss curve for regular runs — but those were
+  // the gentle onboarding segments of a 6-flag climb, which made regular
+  // world-1 runs trivial, and any early-flag raise instantly bricked the
+  // 6-colour boss opening; one array can't serve both).
+  // A regular run's flag count = its curve's length.
+  // World-1 regular retune (greedy bot, 18 seeds): 39% bot win rate with
+  // 0-6 leftover moves — photo finishes instead of the old 58%-with-13-spare.
+  WORLD_CHECKPOINTS: [
+    [45, 110, 220],
+    [68, 213, 442, 765, 1275, 2125],
+    [80, 250, 520, 900, 1500, 2500],
+  ],
+  // Boss curves — always the full climb. NOTE: the bot is a bad proxy at 6
+  // colours (it goes 0/12 even on the curve Omri cruised), so the w1 boss is
+  // tuned by RELATIVE bot progress: this curve pushes the bot's median reach
+  // from flag 3 down to flag 2 vs the "very very easy" v12 curve (~one
+  // notch harder overall, with a heavier tail). Human telemetry decides next.
+  WORLD_BOSS_CHECKPOINTS: [
+    [40, 100, 200, 330, 500, 720],
+    [68, 213, 442, 765, 1275, 2125],
+    [80, 250, 520, 900, 1500, 2500],
+  ],
+  // v11: moves are per-world too — world 1 was "too easy and too long"
+  // (Omri), so it now runs ~half as long (9 start + 6-8 grants ≈ 42-move
+  // budget) with a curve that's gentle while you have no engine (seg1 needs
+  // ~4 pts/move) and steep once you should (seg6 ~25) — bot retune: 25%
+  // win rate at 33-42 moves/run, 2-10 leftover moves on wins, losses spread
+  // over checkpoints 1-5 instead of clustering early. Worlds 2/3 keep the
+  // v6 full-roster tuning. Last grant slot is unused since v10 (the final
+  // flag ends the run).
+  WORLD_START_MOVES: [9, 10, 10],  // opening move pool per world
+  // v14: world-1 grants trimmed by 1 each (Omri: checkpoint refills too
+  // generous). With the v13 curve this lands the bot at 22% wins (was 39%),
+  // finishing with 0-7 moves to spare — surplus now has to be EARNED
+  // (momentum / xtra-move refunds), not granted. Worlds 2/3 untouched.
+  WORLD_CHECKPOINT_MOVES: [
+    [5, 5, 6, 6, 7],
+    [8, 10, 11, 12, 13],
+    [8, 10, 11, 12, 13],
+  ],
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -130,6 +212,33 @@ const CONFIG = {
   AUTO_EXPLODE_MAX_ROUNDS: 1,
   MAX_CASCADES: 30,
 
+  /* ----- Board meta layer (v9) — dice economy + the board-game loop ----- */
+  DICE_MIN_ON_WIN: 1,              // a won run always pays at least this many dice
+  DICE_PER_LEFTOVER_MOVE: 1,       // dice per banked move left when a run is won
+  DICE_ON_PARTIAL_CLEAR: 1,        // reached PARTIAL_CLEAR_CHECKPOINT but lost
+  PARTIAL_CLEAR_CHECKPOINT: 3,     // "partial clear" = crossed at least this checkpoint
+  DICE_ON_LOSS: 0,
+  // v11: the cap is NOT enforced on earnings any more — earned/bought dice
+  // stack freely. Kept as the threshold for a future refill mechanic.
+  DICE_CAP: 10,
+  DICE_PRICE_COINS: 50,            // buy one die for coins on the board hub
+  DIE_SIDES: 6,
+  BOARD_SPACES: 20,                // one lap = one full loop of the board
+  STARTING_DICE: 3,                // dice a brand-new save begins with
+  LAPS_TO_UNLOCK_BOSS: [2, 7, 10], // laps in-world before the boss run unlocks, per world
+  CURRENT_WORLD: 1,                // world a fresh save starts on
+  BOARD_COIN_REWARD_MIN: 10,       // coin space payout range
+  BOARD_COIN_REWARD_MAX: 20,
+  MYSTERY_COINS_MIN: 15,           // mystery box coin outcome range
+  MYSTERY_COINS_MAX: 50,
+  SCRATCH_CARD_SMALL: 15,          // scratch card: no matching symbols
+  SCRATCH_CARD_MEDIUM: 50,         // two symbols match
+  SCRATCH_CARD_JACKPOT: 150,       // all three match
+  COIN_FLIP_HEADS: 30,
+  COIN_FLIP_TAILS: 15,
+  JACKPOT_COINS: 100,              // "Jackpot" meta power-up offer payout
+  LANDMARK_MOVE_BONUS: 1,          // starting moves granted per completed lap
+
   // Animation timings (ms)
   SWAP_MS: 150, POP_MS: 220, FALL_MS: 240, STEP_PAUSE: 40,
   FALL_MAX_MS: 400,
@@ -154,6 +263,33 @@ Object.defineProperty(CONFIG, 'COUNTDOWN_TIMER_START', {
     return Math.max(1, CONFIG.COUNTDOWN_BASE - Math.max(0, n - 1));
   },
 });
+
+/* ------------------------------ Blockers ----------------------------------
+   Data-driven registry: a new blocker type = a new entry here (+ visuals),
+   no engine changes. `intro` gates by checkpoints crossed; `chance` is per
+   refill tile; `cap` bounds concurrency; `make` returns the tile fields.
+   All blockers are protectedTile (nothing clears them but their own rule)
+   and immovableTile (can't be swapped). They ride gravity like chests. */
+const BLOCKERS = {
+  box: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_BOX,
+    chance: () => CONFIG.BLOCKER_STATIC_BOX_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.box,
+    make:   () => ({ hits: CONFIG.BLOCKER_STATIC_BOX_HITS }),
+  },
+  water: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_WATER,
+    chance: () => CONFIG.BLOCKER_WATER_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.water,
+    make:   () => ({}),
+  },
+  safe: {
+    intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_SAFE,
+    chance: () => CONFIG.BLOCKER_COLOR_SAFE_CHANCE,
+    cap:    () => CONFIG.BLOCKER_CAPS.safe,
+    make:   () => ({ lit: [] }), // colour indexes matched adjacent so far
+  },
+};
 
 /* --------------------- Variant telemetry storage --------------------------
    The shared helpers are bound to the base game's localStorage key, so the
@@ -288,6 +424,18 @@ POWERUPS.snowpaint = {
 };
 POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is built at load time
 
+// v9 chomper desc mentions his snacks (mechanics in PersistentGame below —
+// movement steering stays SECRET, never hint at it).
+POWERUPS.chomper.desc = () => `A hungry critter roams the board — after each move you make it eats one piece at full value (specials detonate; 🍖 snacks pay +${CONFIG.CHOMPER_FOOD_BONUS})`;
+
+// Buffet: more snacks on the table (chomper-family upgrade, stackable).
+POWERUPS.buffet = {
+  id: 'buffet', name: 'Buffet', icon: '🍱', cluster: 'utility', stackable: true, tier: 2, requiresChomper: true,
+  desc: () => `${CONFIG.CHOMPER_BUFFET_TILES} more 🍖 snacks stay on the board for Chomper (stacks)`,
+  mods(m) { m.foodBonusTiles = (m.foodBonusTiles || 0) + CONFIG.CHOMPER_BUFFET_TILES; },
+};
+POWERUP_LIST.push(POWERUPS.buffet);
+
 // v7 Spicy Trail: scorch PERSISTS until matched (shared engine gives it a
 // 1-move expiry, which made triggering it nearly impossible — you'd need a
 // match through one specific fresh tile on the very next move). Chomper now
@@ -297,16 +445,258 @@ POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is bui
 // PersistentGame.backfillChomperTrail below.
 POWERUPS.spicytrail.desc = () => 'Tiles Chomper leaves behind stay scorched until matched — matching one sets off a small blast';
 
+// v10 Square bonus rework: flat +10 → the 4 square-match tiles score
+// ×SQUARE_BONUS_MULTIPLIER at their full per-tile value (colour boost,
+// special score, and the run multiplier all included, since addBonus feeds
+// the same ×multiplier pipeline). Tiles beyond the square — merged straight
+// runs, cascades, explosions — score normally.
+Object.assign(POWERUPS.squarescore, {
+  desc: () => `The 4 tiles of a square match score ×${CONFIG.SQUARE_BONUS_MULTIPLIER} (all bonuses included)`,
+  onMatch(g, p, group, api) {
+    if (!group.square || group._sqPaid) return;
+    group._sqPaid = true;
+    // locate the 2×2(s) inside the group — it may be merged with straight runs
+    const sq = new Set();
+    for (const cl of group.cells) {
+      const quad = [[cl.r, cl.c], [cl.r, cl.c + 1], [cl.r + 1, cl.c], [cl.r + 1, cl.c + 1]];
+      if (quad.every(([r, c]) => group.cellSet.has(K(r, c)))) quad.forEach(([r, c]) => sq.add(K(r, c)));
+    }
+    let extra = 0;
+    for (const k of sq) {
+      const [r, c] = k.split(',').map(Number);
+      const t = g.board[r][c];
+      if (!t) continue;
+      extra += 1 + (g.mods.boosts[t.color] || 0) + (t.special ? g.mods.specialScore : 0);
+    }
+    if (extra) api.addBonus(extra * (CONFIG.SQUARE_BONUS_MULTIPLIER - 1));
+  },
+});
+
 // v6 Blast radius: only offered once something in the build MAKES bombs
 // (Bomb chance / Square bomb / Bomb trail) — a bigger boom needs a bomb
 // source beyond lucky L/T matches. Dynamic `disabled` keeps this out of
 // shared makeOffers.
 Object.defineProperty(POWERUPS.blast, 'disabled', {
+  configurable: true, // the board-meta batch gate re-wraps this getter below
   get() {
     const m = ACTIVE_GAME && ACTIVE_GAME.mods;
     return !(m && (m.bombChance > 0 || m.squareBomb || m.chomperBomb));
   },
 });
+
+/* ========================== BOARD META LAYER ===============================
+   A board-game hub that wraps the runs: after each run the player returns to
+   a circular 20-space board and spends dice (earned by runs) to move a token
+   around it. Spaces pay coins/consumables/run-modifiers/mini-games; laps
+   unlock a boss run; beating the boss advances the world, which auto-unlocks
+   the next power-up batch in the draft pool.
+   Everything below is DATA (worlds, space layouts, modifiers, batches) —
+   adding a space type, world, or mini-game must not require engine edits.
+   The meta layer uses Math.random on purpose: it is not part of the seeded,
+   replayable run — only in-run state rides the seeded RNG.
+   ========================================================================== */
+
+/* ----- Run modifiers — granted by board spaces, expire after ONE run -----
+   Declarative hooks the run reads: startMoves (± starting moves),
+   cpBonus (± moves per checkpoint grant), colours (forced colour count),
+   onRunStart(g) (arbitrary setup once the board exists).
+   negative:true marks boss handicaps (styled red, announced pre-run). */
+const RUN_MODIFIERS = {
+  cpmoves:      { id: 'cpmoves', icon: '🚩', name: 'Trail rations',
+                  desc: '+1 move on every checkpoint grant this run', cpBonus: 1 },
+  first2x:      { id: 'first2x', icon: '✨', name: 'Opening act',
+                  desc: 'Your first match of the run scores ×2', onRunStart(g) { g.first2x = true; } },
+  startspecial: { id: 'startspecial', icon: '🎆', name: 'Head start',
+                  desc: 'One random special piece on the board at run start',
+                  onRunStart(g) { g.placeRandomSpecial(); } },
+  landmark:     { id: 'landmark', icon: '🏠', name: 'Home advantage',
+                  desc: `+${CONFIG.LANDMARK_MOVE_BONUS} starting move (completed lap)`,
+                  startMoves: CONFIG.LANDMARK_MOVE_BONUS },
+  boss6:        { id: 'boss6', icon: '🌈', name: 'Six colours',
+                  desc: 'BOSS: the board uses 6 tile colours this run', negative: true, colours: 6 },
+  bosscold:     { id: 'bosscold', icon: '🥶', name: 'Cold start',
+                  desc: 'BOSS: start the run with 2 fewer moves', negative: true, startMoves: -2 },
+};
+
+/* ----- Meta power-ups — board offers that pay META rewards, no in-run power */
+const META_POWERUPS = {
+  jackpot: { id: 'jackpot', icon: '💰', name: 'Jackpot',
+             desc: `Awards ${CONFIG.JACKPOT_COINS} coins immediately. No in-run effect.`,
+             apply() { META.addCoins(CONFIG.JACKPOT_COINS); } },
+};
+
+/* ----- Consumables — dropped by board spaces (shop pool). Inventory only for
+   now: in-run usage is a separate feature, the board just banks them. */
+const CONSUMABLES = {
+  hammer:  { id: 'hammer', icon: '🔨', name: 'Hammer' },
+  bomb:    { id: 'bomb', icon: '🧨', name: 'Bomb' },
+  shuffle: { id: 'shuffle', icon: '🔀', name: 'Shuffle' },
+};
+
+/* ----- Space types — visual identity per type; behaviour lives in the board
+   UI's landing resolver, which switches on these ids. Add a type here + a
+   case in resolveLanding and it works on any world's layout. */
+const SPACE_TYPES = {
+  landmark:         { icon: '🏠', label: 'Home', cls: 'landmark' },
+  coin:             { icon: '🪙', label: 'Coins', cls: 'coin' },
+  consumable:       { icon: '🧰', label: 'Item drop', cls: 'consumable' },
+  modifier:         { icon: '🔮', label: 'Run modifier', cls: 'modifier' },
+  mystery:          { icon: '❔', label: 'Mystery box', cls: 'mystery' },
+  minigame_flip:    { icon: '🎰', label: 'Coin flip', cls: 'minigame' },
+  minigame_scratch: { icon: '🎫', label: 'Scratch card', cls: 'minigame' },
+  metaoffer:        { icon: '💼', label: 'Meta offer', cls: 'metaoffer' },
+  empty:            { icon: '·', label: 'Flavour', cls: 'empty' },
+  boss:             { icon: '👹', label: 'BOSS', cls: 'boss' },
+};
+
+/* ----- Worlds — layout is 20 space-type ids, clockwise from Home at 0.
+   Composition (world 1 spec): coin×4, consumable×2, modifier×3, mystery×2,
+   mini-game×2, meta offer×1, landmark×1, empty×3 = 18 — padded with +1 coin
+   and +1 empty to fill the 20 spaces. Empty spaces are dead beats: landing
+   on one does nothing (v11 — flavour text cut). The boss is NOT a space:
+   once unlocked it takes over the Start-run button (v11). */
+const WORLD_LAYOUT = [
+  'landmark',          //  0 — Home
+  'coin', 'empty', 'modifier', 'mystery',                    //  1-4
+  'coin', 'consumable', 'minigame_flip', 'modifier', 'coin', //  5-9
+  'empty',                                                   // 10
+  'minigame_scratch', 'consumable', 'coin', 'mystery',       // 11-14
+  'modifier', 'empty', 'metaoffer', 'coin', 'empty',         // 15-19
+];
+const WORLDS = [
+  { id: 1, name: 'Meadow Hollow', icon: '🌿',
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[0],
+    boss: { name: 'Prism Guardian', icon: '🌈', modifiers: ['boss6'] },
+    modifierPool: ['cpmoves', 'first2x', 'startspecial'],
+    metaOffers: ['jackpot'],
+    spaces: WORLD_LAYOUT },
+  { id: 2, name: 'Ember Dunes', icon: '🏜️',
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[1],
+    boss: { name: 'Dune Colossus', icon: '🗿', modifiers: ['bosscold'] },
+    modifierPool: ['cpmoves', 'first2x', 'startspecial'],
+    metaOffers: ['jackpot'],
+    spaces: WORLD_LAYOUT },
+  { id: 3, name: 'Frost Summit', icon: '🏔️',
+    lapsForBoss: CONFIG.LAPS_TO_UNLOCK_BOSS[2],
+    boss: { name: 'Summit Wyrm', icon: '🐉', modifiers: ['boss6', 'bosscold'] },
+    modifierPool: ['cpmoves', 'first2x', 'startspecial'],
+    metaOffers: ['jackpot'],
+    spaces: WORLD_LAYOUT },
+];
+
+/* ----- Power-up batches — which world unlocks which draft-pool picks.
+   Pure data: reaching world N makes batches 1..N available automatically
+   (no unlock screen yet — that's a separate feature). Ids NOT in any batch
+   never appear (benched: flood, old snowball). Ids listed here but disabled
+   at the roster level (lifesaver, tempo, autoexplode) STAY out until their
+   base flag flips — the batch only says which world they belong to.
+   'babychomper' is a planned pick with no implementation yet — a harmless
+   placeholder until its roster entry exists. */
+const POWERUP_BATCHES = {
+  1: ['boost', 'bombchance', 'countdown', 'expandrow', 'expandcol', 'xtramove',
+      'lifesaver', 'diagswap', 'tempo', 'square', 'momentum', 'snowcrush', 'snowpaint'],
+  2: ['fillup', 'spawner', 'converter', 'spawnweight', 'purge', 'blast',
+      'autoexplode', 'specialscore', 'rowclear', 'colclear', 'matryoshka',
+      'aftershock', 'fusionmove', 'pinata', 'tripletile', 'chests', 'conveyor',
+      'chomper', 'squarescore', 'squarebomb', 'gourmet', 'buffet', 'babychomper'],
+  3: ['sweep', 'lava', 'twinchomper', 'doublebite', 'spicytrail', 'bombtrail'],
+};
+
+/* ----- Persistent meta state — localStorage-backed, survives runs/reloads */
+const META_KEY = 'rl_persistent_meta_v1';
+const randInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+
+const META = {
+  state: (() => {
+    const defaults = {
+      v: 1,
+      world: CONFIG.CURRENT_WORLD,   // 1-based; drives batch unlocks + board theme
+      dice: CONFIG.STARTING_DICE,    // carried between runs, uncapped (v11)
+      coins: 0,
+      pos: 0,                        // token position on the 20-space loop
+      laps: 0,                       // lifetime laps (display)
+      worldLaps: 0,                  // laps in the CURRENT world — unlocks its boss
+      consumables: { hammer: 0, bomb: 0, shuffle: 0 },
+      modifiers: [],                 // active run modifiers [{id}], expire after one run
+      bossDefeated: [],              // world ids whose boss run has been cleared
+      boardSpeed: 1,                 // board animation speed ×1/×2/×3 (dice + token)
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem(META_KEY));
+      if (saved && saved.v === 1) return { ...defaults, ...saved, consumables: { ...defaults.consumables, ...saved.consumables } };
+    } catch (e) { /* corrupt / unavailable — start fresh */ }
+    return defaults;
+  })(),
+  save() {
+    try { localStorage.setItem(META_KEY, JSON.stringify(this.state)); } catch (e) { /* prototype keeps playing */ }
+  },
+  world() { return WORLDS[Math.min(this.state.world, WORLDS.length) - 1]; },
+  bossUnlocked() {
+    return this.state.worldLaps >= this.world().lapsForBoss && !this.state.bossDefeated.includes(this.state.world);
+  },
+  campaignDone() { return this.state.bossDefeated.includes(WORLDS.length); },
+  // v11: gains are UNCAPPED (DICE_CAP is reserved for a future refill
+  // mechanic) — only the floor at 0 is enforced. Returns the actual delta.
+  addDice(n) {
+    const before = this.state.dice;
+    this.state.dice = Math.max(0, before + n);
+    this.save();
+    return this.state.dice - before;
+  },
+  buyDie() {
+    if (this.state.coins < CONFIG.DICE_PRICE_COINS) return false;
+    this.state.coins -= CONFIG.DICE_PRICE_COINS;
+    this.state.dice += 1;
+    this.save();
+    return true;
+  },
+  addCoins(n) { this.state.coins += n; this.save(); },
+  addConsumable(id) { this.state.consumables[id] = (this.state.consumables[id] || 0) + 1; this.save(); },
+  addModifier(id) { this.state.modifiers.push({ id }); this.save(); },
+  // Crossing Home = one lap: counts everywhere it should and banks the
+  // landmark's +1 starting move for the next run (stacks per lap).
+  onLap() {
+    this.state.laps++; this.state.worldLaps++;
+    this.state.modifiers.push({ id: 'landmark' });
+    this.save();
+  },
+  // Boss cleared: next world (if any) — new board, lap counter reset, next
+  // power-up batch unlocks implicitly because `world` grew. Returns whether
+  // a next world actually exists.
+  advanceWorld() {
+    if (!this.state.bossDefeated.includes(this.state.world)) this.state.bossDefeated.push(this.state.world);
+    if (this.state.world >= WORLDS.length) { this.save(); return false; }
+    this.state.world++;
+    this.state.worldLaps = 0;
+    this.state.pos = 0;
+    this.save();
+    return true;
+  },
+};
+
+/* ----- World-gated draft pool — wraps every roster entry's `disabled` so
+   shared makeOffers only sees picks whose batch the player has reached.
+   Composes with existing flags/getters (tempo's manual disable, blast's
+   dynamic bomb-source gate) instead of replacing them; assignment still
+   works later via the setter. NO shared/* edits. */
+{
+  const BATCH_OF = {};
+  for (const [w, ids] of Object.entries(POWERUP_BATCHES)) for (const id of ids) BATCH_OF[id] = +w;
+  for (const def of POWERUP_LIST) {
+    const d = Object.getOwnPropertyDescriptor(def, 'disabled');
+    const baseGet = d && d.get ? d.get.bind(def) : null;
+    let manual = d && !d.get ? d.value : undefined;
+    Object.defineProperty(def, 'disabled', {
+      configurable: true,
+      get() {
+        const own = manual !== undefined ? manual : (baseGet ? baseGet() : false);
+        const batch = BATCH_OF[def.id];
+        return !!own || batch === undefined || batch > META.state.world;
+      },
+      set(v) { manual = v; },
+    });
+  }
+}
 
 /* ========================== PERSISTENT GAME ================================
    Subclass seams (called by the shared engine):
@@ -325,8 +715,111 @@ class PersistentGame extends Game {
     this.marks = new Set();
     this.drip = { pinata: 0, chest: 0, triple: 0 }; // dry-move pity counters
     this.pendingChests = 0;      // chests queued to ride in on the next refill
-    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; // cap telemetry, per segment
+    this.segPeak = 0; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; // cap/food telemetry, per segment
+    this.segBlockers = { box: 0, water: 0, safe: 0 };
+    this.foodCells = new Set();
+    this.runMods = [];           // board-granted run modifiers, snapshotted per run
+    this.bossRun = false;
+    this.runReward = null;       // {dice, bossCleared, worldAdvanced} for the end screen
+    this.armed = null;           // consumable awaiting a board tap ('hammer' | 'bomb')
   }
+
+  /* ------------------- Board-meta run modifier plumbing ------------------ */
+  runModDefs() { return this.runMods.map(m => RUN_MODIFIERS[m.id]).filter(Boolean); }
+  runModStartMoves() { return this.runModDefs().reduce((s, d) => s + (d.startMoves || 0), 0); }
+  runModCpBonus() { return this.runModDefs().reduce((s, d) => s + (d.cpBonus || 0), 0); }
+
+  // "Head start" modifier: one random special on the board at run start.
+  placeRandomSpecial() {
+    let guard = 0;
+    while (guard++ < 300) {
+      const k = this.rollInteriorCell();
+      const [r, c] = k.split(',').map(Number);
+      const t = this.board[r][c];
+      if (!t || t.special || t.chest || t.chomper) continue;
+      t.special = ['bomb', 'arrow', 'lightning'][Math.floor(this.rng() * 3)];
+      t.dir = t.special === 'arrow' ? (this.rng() < 0.5 ? 'h' : 'v') : null;
+      if (this.mods.countdown) t.countdown = CONFIG.COUNTDOWN_TIMER_START;
+      t.fresh = true;
+      this.addFx(r, c, '🎆', 'emoji');
+      return;
+    }
+  }
+
+  // Run ended (win or loss): pay the dice economy, settle the boss, expire
+  // every board modifier. Single exit point — checkLevelEnd calls it right
+  // after the phase flips to win/loss.
+  finishRunMeta(win) {
+    const leftover = Math.max(0, this.movesLeft);
+    // Partial clear scales with the run's flag count: on a short (3-flag)
+    // run the consolation die comes from reaching the second-to-last flag.
+    const partialAt = Math.min(CONFIG.PARTIAL_CLEAR_CHECKPOINT, this.checkpoints().length - 1);
+    let dice;
+    if (win) dice = Math.max(CONFIG.DICE_MIN_ON_WIN, leftover * CONFIG.DICE_PER_LEFTOVER_MOVE);
+    else if (this.run.checkpointIdx >= partialAt) dice = CONFIG.DICE_ON_PARTIAL_CLEAR;
+    else dice = CONFIG.DICE_ON_LOSS;
+    this.runReward = { dice: META.addDice(dice), bossCleared: false, worldAdvanced: false };
+    if (this.bossRun && win) {
+      this.runReward.bossCleared = true;
+      this.runReward.worldAdvanced = META.advanceWorld();
+    }
+    META.state.modifiers = []; // every board modifier expires after one run — used or not
+    META.save();
+    // undo a boss colour-count override
+    if (this.savedColours !== undefined) { this.opts.colours = this.savedColours; this.savedColours = undefined; }
+  }
+
+  backToBoard() {
+    if (this.phase !== 'win' && this.phase !== 'loss') return;
+    this.phase = 'menu'; // 'menu' renders the board hub
+    this.board = null;
+    this.busy = false;
+    this.render();
+  }
+
+  /* ----- In-run consumables (v12) — board-earned items, META inventory.
+     No move cost. Hammer and bomb resolve through the engine's normal step
+     pipeline (explodeSeeds), so special chains, gravity, cascades, scoring,
+     and checkpoint crossings all just work. `armed` is the targeting mode:
+     the next board tap is the target instead of a swap. */
+  async useConsumable(kind, cell) {
+    if (this.phase !== 'level' || this.busy) return;
+    const inv = META.state.consumables;
+    if (!(inv[kind] > 0)) return;
+    this.armed = null;
+    if (kind === 'shuffle') {
+      inv.shuffle--; META.save();
+      this.busy = true;
+      this.callout('🔀 Shuffled!');
+      this.reshuffleBoard();
+      this.render();
+      await this.sleep(300);
+      this.busy = false;
+      this.render();
+      return;
+    }
+    if (!cell) return;
+    const t = this.board[cell.r] && this.board[cell.r][cell.c];
+    if (!t || t.chest || t.chomper || t.blocker) { // indestructible / blocker target — keep the item
+      if (t) { t.wiggle = true; this.render(); setTimeout(() => { delete t.wiggle; this.render(); }, 380); }
+      this.render();
+      return;
+    }
+    inv[kind]--; META.save();
+    this.busy = true;
+    this.addFx(cell.r, cell.c, kind === 'hammer' ? '🔨' : '🧨', 'emoji');
+    if (kind === 'bomb') { t.special = 'bomb'; t.countdown = null; this.doShake(8); }
+    // hammer on a special DETONATES it; on a plain tile the pseudo-special
+    // 'hammer' clears exactly that one tile (explosionCells → no extras)
+    else if (!t.special) { t.special = 'hammer'; t.countdown = null; }
+    await this.explodeSeeds([cell]);
+    this.checkLevelEnd();
+    this.busy = false;
+    this.render();
+  }
+
+  // ("Opening act" first-match ×2 lives in the processStep override below,
+  // merged with the blocker step effects — a class can only define it once.)
 
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
   computeMods() {
@@ -351,7 +844,23 @@ class PersistentGame extends Game {
     if (v > this.segPeak) this.segPeak = v;
   }
 
-  newRun(seed) {
+  // opts.boss starts the current world's boss run: its negative modifiers
+  // join the run's modifier list (announced on the board before starting).
+  newRun(seed, opts = {}) {
+    this.bossRun = !!opts.boss;
+    // Snapshot the board-granted modifiers for this run. They expire at run
+    // end (finishRunMeta) — a mid-run reload never ends the run, so they
+    // survive to the next attempt, which favours the player.
+    this.runMods = META.state.modifiers.map(m => ({ ...m }));
+    if (this.bossRun) for (const id of META.world().boss.modifiers) this.runMods.push({ id });
+    this.runReward = null;
+    this.armed = null;
+    // Boss "Six colours": force the colour count for this run only —
+    // finishRunMeta restores the player's own setting afterwards. If a
+    // previous run never finished (debug/cheat paths), undo its force first.
+    if (this.savedColours !== undefined) { this.opts.colours = this.savedColours; this.savedColours = undefined; }
+    const forced = this.runModDefs().find(d => d.colours);
+    if (forced) { this.savedColours = this.opts.colours; this.opts.colours = forced.colours; }
     this.seed = (seed >>> 0) || 1;
     this.rng = mulberry32(this.seed);
     // run.level = draft number (1 at run start, +1 per checkpoint) — it
@@ -372,26 +881,35 @@ class PersistentGame extends Game {
   }
 
   // Checkpoint values, colour-scaled (cumulative run score, not per-segment).
+  // Regular and boss runs read separate per-world curves (v13) — a regular
+  // run's flag count is just its curve's length. The world can't change
+  // mid-run, so a live read is safe.
   checkpoints() {
     const s = CONFIG.COLOUR_TARGET_SCALE[this.opts.colours] || 1;
-    return CONFIG.CHECKPOINTS.map(v => Math.round(v * s));
+    const table = this.bossRun ? CONFIG.WORLD_BOSS_CHECKPOINTS : CONFIG.WORLD_CHECKPOINTS;
+    const base = table[Math.min(META.state.world, table.length) - 1];
+    return base.map(v => Math.round(v * s));
   }
 
   // Shared pickOffer calls startLevel after every pick — the variant
   // dispatcher. Every pick (the first included) mutates the LIVE board;
   // no regeneration, ever.
-  startLevel() {
+  async startLevel() {
     if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
-    this.growBoard();
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
     const def = POWERUPS[pick.id];
     if (def.onLevelStart) def.onLevelStart(this, pick); // spawn-once hooks (chomper family)
+    if (pick.id === 'chomper') this.seedChomperFood();  // v9: his snacks arrive with him
     // One move can cross several checkpoints at once — settle every owed draft.
     this.run.pendingDrafts = Math.max(0, this.run.pendingDrafts - 1);
     if (this.run.pendingDrafts > 0) { this.startDraft(); return; }
-    if (!this.findAnyMove()) this.reshuffleBoard();
     this.phase = 'level';
+    this.busy = true;
+    this.render();
+    await this.growBoardAnimated(); // no-op unless Expand is owed
+    if (!this.findAnyMove()) this.reshuffleBoard();
+    this.checkLevelEnd(); // expansion cascades can score across a checkpoint
     this.busy = false;
     this.render();
   }
@@ -402,8 +920,10 @@ class PersistentGame extends Game {
   startBoard() {
     this.rows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     this.cols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
-    this.movesLeft = CONFIG.START_MOVES;
-    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0;
+    // board modifiers adjust the opening pool (landmark laps +, boss cold start −)
+    const startMoves = CONFIG.WORLD_START_MOVES[Math.min(META.state.world, CONFIG.WORLD_START_MOVES.length) - 1];
+    this.movesLeft = Math.max(1, startMoves + this.runModStartMoves());
+    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; this.segBlockers = { box: 0, water: 0, safe: 0 };
     this.lastWarnedMoves = null;
     this.score = 0;
     this.segStartScore = 0;  // telemetry: score at the current segment's start
@@ -413,34 +933,144 @@ class PersistentGame extends Game {
     this.genBoard();
     this.marks = new Set();
     this.pinatas = new Map(); this.triples = new Set(); this.tripleArmed = false;
+    this.foodCells = new Set(); // cell layer, like marks — foodTarget() kept stocked
     this.drip = { pinata: 0, chest: 0, triple: 0 };
     this.pendingChests = 0;
     this.lastSwapDir = null;
     this.emit('onLevelStart'); // no-op with no picks (spawn-once hooks live on picks)
+    this.first2x = false;
+    for (const d of this.runModDefs()) if (d.onRunStart) d.onRunStart(this); // board modifiers with setup hooks
     if (!this.findAnyMove()) this.reshuffleBoard(); // placed pieces can rarely kill the only move
     this.phase = 'level';
     this.busy = false;
     this.render();
   }
 
-  // Expand picks grow the live board: rows append at the BOTTOM, columns at
-  // the RIGHT, so existing cell keys (marks/piñatas/triples) stay valid.
-  // New tiles roll match-avoiding colours, so growth never fires a free cascade.
-  growBoard() {
+  // v9 Expand payoff moment: rows append at the BOTTOM, columns at the RIGHT
+  // (cell keys for marks/piñatas/triples stay valid) — but the new cells stay
+  // EMPTY, so gravity visibly pulls the existing pieces outward into the gap
+  // and fresh tiles rain in from above. Natural fill means the growth can
+  // land matches and cascade — the board growing IS the reward.
+  async growBoardAnimated() {
     const wantRows = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_ROWS + this.mods.expandRows);
     const wantCols = Math.min(CONFIG.MAX_BOARD, CONFIG.BOARD_COLS + this.mods.expandCols);
-    while (this.rows < wantRows) {
-      this.board.push(Array(this.cols).fill(null));
-      this.rows++;
-      const r = this.rows - 1;
-      for (let c = 0; c < this.cols; c++) this.board[r][c] = this.makeTile(this.rollColorAvoidingMatches(r, c), true);
+    if (this.rows >= wantRows && this.cols >= wantCols) return;
+    while (this.rows < wantRows) { this.board.push(Array(this.cols).fill(null)); this.rows++; }
+    while (this.cols < wantCols) { this.cols++; for (let r = 0; r < this.rows; r++) this.board[r].push(null); }
+    this.callout('📏 The board grows!');
+    this.doShake(8);
+    this.render(); await this.sleep(380); // let the bigger frame and the gap read
+    await this.dropAndFill();             // pieces shift outward, new tiles fall in
+    await this.resolveBoard(null);        // growth cascades are allowed — payoff
+  }
+
+  /* --------------------------- Chomper food ------------------------------
+     Food lives on the CELL layer, exactly like xtra-move marks: it sits
+     BEHIND pieces (foodCells: key -> respawns left), pieces on it match and
+     clear normally, and it never moves. Unlike marks/piñatas/triples, food
+     cells are NOT walls — Chomper walks onto them and eats the snack
+     (+CHOMPER_FOOD_BONUS). foodTarget() snacks are ALWAYS on the board while
+     Chomper is in the build: every eaten one is replaced the same move. */
+  foodTarget() {
+    return this.mods.chomper ? CONFIG.CHOMPER_FOOD_COUNT + (this.mods.foodBonusTiles || 0) : 0;
+  }
+
+  topUpFood() {
+    let guard = 0;
+    while (this.foodCells.size < this.foodTarget() && guard++ < 20) {
+      if (!this.spawnFoodRandom()) break;
     }
-    while (this.cols < wantCols) {
-      this.cols++;
-      for (let r = 0; r < this.rows; r++) this.board[r].push(null);
-      const c = this.cols - 1;
-      for (let r = 0; r < this.rows; r++) this.board[r][c] = this.makeTile(this.rollColorAvoidingMatches(r, c), true);
+  }
+
+  foodCellOk(r, c) {
+    if (r <= 0 || r >= this.rows - 1 || c <= 0 || c >= this.cols - 1) return false; // interior only
+    const k = K(r, c);
+    if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) return false;
+    const t = this.board[r][c];
+    return !!t && !t.special && !this.protectedTile(t); // not on specials or indestructibles (chest/Chomper block his step)
+  }
+
+  spawnFoodAt(r, c) {
+    this.foodCells.add(K(r, c));
+    this.addFx(r, c, '🍖', 'emoji');
+  }
+
+  spawnFoodRandom() {
+    let guard = 0;
+    while (guard++ < 300) {
+      const r = 1 + Math.floor(this.rng() * (this.rows - 2)), c = 1 + Math.floor(this.rng() * (this.cols - 2));
+      if (!this.foodCellOk(r, c)) continue;
+      this.spawnFoodAt(r, c);
+      return true;
     }
+    return false;
+  }
+
+  seedChomperFood() {
+    // first snack lands close to him (2..CHOMPER_FOOD_SPAWN_DISTANCE away,
+    // never adjacent) so the secret movement rule has something to reveal
+    let ch = null;
+    for (let r = 0; r < this.rows && !ch; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].chomper) { ch = { r, c }; break; }
+    let placed = 0;
+    if (ch) {
+      const near = [];
+      for (let r = 1; r < this.rows - 1; r++) for (let c = 1; c < this.cols - 1; c++) {
+        const d = Math.abs(r - ch.r) + Math.abs(c - ch.c);
+        if (d >= 2 && d <= CONFIG.CHOMPER_FOOD_SPAWN_DISTANCE && this.foodCellOk(r, c)) near.push({ r, c });
+      }
+      if (near.length) {
+        const p = near[Math.floor(this.rng() * near.length)];
+        this.spawnFoodAt(p.r, p.c);
+        placed++;
+      }
+    }
+    this.topUpFood(); // fill the rest of the table
+  }
+
+  // v10 Chomper timing: he resolves FIRST — his step happens right after
+  // the swap lands, before matches clear or gravity runs, so aiming him at
+  // a snack can't be spoiled by the board churning under him. His own
+  // trailing board-settle is suppressed here; the outer resolveBoard then
+  // resolves everything WITH swapCells, keeping the player's match ACTIVE
+  // (sweep/snowball/momentum/mark-refund semantics intact).
+  async resolveBoard(swapCells) {
+    if (this._suppressResolve) return; // chomper's internal settle — the outer call covers it
+    if (swapCells && this.mods.chomper && this.phase === 'level') {
+      this._suppressResolve = true;
+      try { await this.chomperStepAndEat(); } finally { this._suppressResolve = false; }
+      this._chomperStepped = true; // endOfMove must not step him twice
+    }
+    await super.resolveBoard(swapCells);
+  }
+
+  // Shared endOfMove hook — skip when he already pre-stepped this move
+  // (merge moves and board effects still reach here and step him normally).
+  async chomperMove() {
+    if (this._chomperStepped) { this._chomperStepped = false; return; }
+    await this.chomperStepAndEat();
+  }
+
+  // Eat on arrival: after his step, any Chomper standing on a food cell
+  // consumes it (cell marks never move, so position is the identity); the
+  // table is restocked the same move — CHOMPER_FOOD_COUNT (+Buffet) always.
+  async chomperStepAndEat() {
+    await super.chomperMove();
+    if (!this.foodCells.size) return;
+    let ate = false;
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+      const t = this.board[r][c];
+      if (!t || !t.chomper) continue;
+      const k = K(r, c);
+      if (!this.foodCells.has(k)) continue;
+      this.foodCells.delete(k);
+      this.score += CONFIG.CHOMPER_FOOD_BONUS;
+      this.segFood = (this.segFood || 0) + 1;
+      this.addFx(r, c, `🍖 +${CONFIG.CHOMPER_FOOD_BONUS}`, 'big');
+      this.callout('😬 nom!');
+      ate = true;
+    }
+    if (ate) { this.topUpFood(); this.render(); }
   }
 
   continueRun() {
@@ -451,32 +1081,49 @@ class PersistentGame extends Game {
   // Engine trySwap calls this once per resolved player move — drip spawns
   // ride the move tail so cheats/board effects never advance the economy.
   async endOfMove() {
+    const hadWater = this.waterCount() > 0;
+    this.waterClearedThisMove = false;
     await super.endOfMove();
     if (this.phase === 'level') {
+      // all the move's water removals are done — bonus if the board is dry now
+      if (hadWater && this.waterClearedThisMove && this.waterCount() === 0) this.waterAllClearBonus();
+      // spread AFTER the move and its cascades fully resolve
+      if (this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
       this.dripRolls();
+      this.topUpFood(); // the table never runs low (no-op without Chomper)
       if (this.movesLeft <= 3) this.segDanger++; // moves played under the gun (cap-tuning telemetry)
     }
   }
 
   // Replaces per-level clear/loss: cross every checkpoint the score now
-  // clears (grant moves + queue drafts), otherwise check for run end.
+  // clears (grant moves + queue drafts). v10: crossing the FINAL checkpoint
+  // ENDS the run as a win — the moves you didn't need become dice, so
+  // leftover moves are the prize, not a springboard for more score.
   checkLevelEnd() {
     if (this.phase !== 'level') return;
     const cps = this.checkpoints();
     let crossed = 0, granted = 0;
     while (this.run.checkpointIdx < cps.length && this.score >= cps[this.run.checkpointIdx]) {
       const i = this.run.checkpointIdx++;
-      const grant = CONFIG.CHECKPOINT_MOVES[Math.min(i, CONFIG.CHECKPOINT_MOVES.length - 1)];
+      if (this.run.checkpointIdx >= cps.length) { // final flag — run over, bank the surplus
+        this.run.finalReached = true;
+        this.logLevel('end');
+        this.phase = 'win';
+        this.finishRunMeta(true); // dice payout (1/leftover move), boss settle, modifier expiry
+        return;
+      }
+      const grants = CONFIG.WORLD_CHECKPOINT_MOVES[Math.min(META.state.world, CONFIG.WORLD_CHECKPOINT_MOVES.length) - 1];
+      const grant = grants[Math.min(i, grants.length - 1)]
+                  + this.runModCpBonus(); // board modifier: +1 per Trail rations
       const before = this.movesLeft;
       this.movesLeft += grant;
       granted += this.movesLeft - before; crossed++; // overlay shows what the cap actually let through
       this.logLevel('clear');
       this.run.pendingDrafts++;
       this.tempoUsed = false; // Tempo re-arms for the new segment
-      if (this.run.checkpointIdx >= cps.length) this.run.finalReached = true;
     }
     if (crossed) {
-      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted, final: this.run.finalReached };
+      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted };
       this.phase = 'checkpoint';
       return;
     }
@@ -486,8 +1133,9 @@ class PersistentGame extends Game {
         this.movesLeft += CONFIG.LIFESAVER_BONUS_MOVES;
         this.callout(`🛟 Lifesaver! +${CONFIG.LIFESAVER_BONUS_MOVES} moves`);
       } else {
-        this.logLevel(this.run.finalReached ? 'end' : 'loss');
-        this.phase = this.run.finalReached ? 'win' : 'loss';
+        this.logLevel('loss');
+        this.phase = 'loss';
+        this.finishRunMeta(false); // dice payout (partial clear), modifier expiry
       }
     }
   }
@@ -513,11 +1161,15 @@ class PersistentGame extends Game {
       // moves played at ≤3 left — see handover §telemetry for the tuning rule
       peakBank: this.segPeak, clipped: this.segClipped, dangerMoves: this.segDanger,
       snowBonus: this.run.snowBonus, // v8: snowball payout level at segment end
+      world: META.state.world, boss: !!this.bossRun, // board meta context
+      runMods: this.runMods.map(m => m.id),
+      foodEaten: this.segFood || 0,  // chomper snacks eaten this segment
+      blockers: { ...this.segBlockers }, // boxes broken / water removed / safes opened
       fast: !!this.fast, // bot/test runs — excluded from human summaries
     });
     this.segStartScore = this.score;
     this.movesUsed = 0; this.moveScores = [];
-    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0;
+    this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; this.segBlockers = { box: 0, water: 0, safe: 0 };
   }
 
   // v8 snowball bar: charge units from either charger pick; each full bar
@@ -554,13 +1206,205 @@ class PersistentGame extends Game {
     if (this.mods.spicyTrail && t && t.volatile) t.volatile = Infinity;
   }
 
-  // Queued drip chests ride in as the topmost refill tile of a column.
+  // Queued drip chests ride in as the topmost refill tile of a column;
+  // unlocked blockers roll for each remaining refill slot (v10).
   makeRefillTile(r, c) {
     if (r === 0 && this.pendingChests > 0) {
       this.pendingChests--;
       return { id: this.tileId++, color: -1, chest: true, special: null, dir: null, countdown: null };
     }
+    const b = this.rollBlockerTile();
+    if (b) return b;
     return super.makeRefillTile(r, c);
+  }
+
+  /* ------------------------------ Blockers -------------------------------
+     Inert tiles cleared only via their own interaction. Protected from all
+     clears/transforms, unswappable, walls for Chomper; they ride gravity. */
+  protectedTile(t) { return super.protectedTile(t) || !!(t && t.blocker); }
+  immovableTile(t) { return super.immovableTile(t) || !!(t && t.blocker); }
+  gravityFixed(t) { return !!(t && t.blocker); } // blockers hang in place; holes persist beneath them
+
+  blockerCount(type) {
+    let n = 0;
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].blocker === type) n++;
+    return n;
+  }
+
+  rollBlockerTile() {
+    for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
+      if (this.blockerCount(type) >= def.cap()) continue;
+      if (this.rng() < def.chance())
+        return { id: this.tileId++, color: -4, blocker: type, ...def.make(),
+                 special: null, dir: null, countdown: null, fresh: true };
+    }
+    return null;
+  }
+
+  // Match-time blocker effects, same timing as other match effects: the
+  // shared processStep stamps group.active, then this runs. Boxes and safes
+  // count PLAYER matches only; water is removed by any match (cascades too),
+  // and removing a water chain-removes the connected puddle.
+  processStep(groups, swapCells, seeds, boardClears = []) {
+    const before = this.score; // for the "Opening act" board modifier below
+    const res = super.processStep(groups, swapCells, seeds, boardClears);
+    if (groups.length) this.blockerMatchEffects(groups);
+    this.blockerExplosionEffects(res);
+    // "Opening act" board modifier: the run's first scoring step pays double.
+    if (this.first2x && res.cnt) {
+      this.first2x = false;
+      const gained = this.score - before;
+      if (gained > 0) {
+        this.score += gained;
+        res.pts += gained;
+        this.callout(`✨ First match ×2! +${gained}`);
+      }
+    }
+    return res;
+  }
+
+  // Special-piece explosions AFFECT blockers (they still aren't cleared by
+  // them): a blast covering a box deals 1 hit, water in the blast is removed
+  // (chain rule applies), and a safe lights the exploding special's colour.
+  // Runs before applyStep, so exploding specials are still on the board.
+  blockerExplosionEffects(res) {
+    const hit = new Set(); // one effect per blocker per step
+    for (const { r, c, explosion } of res.cleared.values()) {
+      const t = this.board[r][c];
+      if (!t || !t.special) continue; // every cleared special explodes (invariant)
+      for (const cl of this.explosionCells(r, c, t)) {
+        const b = this.board[cl.r][cl.c];
+        if (!b || !b.blocker || hit.has(b.id)) continue;
+        hit.add(b.id);
+        if (b.blocker === 'water') this.removeWaterChain(cl.r, cl.c);
+        else if (b.blocker === 'box') this.damageBox(cl.r, cl.c, b);
+        else if (b.blocker === 'safe') this.lightSafe(cl.r, cl.c, b, t.color);
+      }
+    }
+  }
+
+  blockerNeighbors(group) {
+    const seen = new Set(), out = [];
+    for (const cl of group.cells) for (const [dr, dc] of DIRS4) {
+      const r = cl.r + dr, c = cl.c + dc, k = K(r, c);
+      if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
+      seen.add(k);
+      const t = this.board[r][c];
+      if (t && t.blocker) out.push({ r, c, t });
+    }
+    return out;
+  }
+
+  blockerMatchEffects(groups) {
+    for (const g of groups) {
+      const hitOnce = new Set(); // one box hit / safe light per group
+      for (const { r, c, t } of this.blockerNeighbors(g)) {
+        if (t.blocker === 'water') { // any match frees water, cascades included
+          this.removeWaterChain(r, c);
+          continue;
+        }
+        if (!g.active || hitOnce.has(t.id)) continue; // boxes/safes: player matches only
+        hitOnce.add(t.id);
+        if (t.blocker === 'box') this.damageBox(r, c, t);
+        else if (t.blocker === 'safe') this.lightSafe(r, c, t, g.color);
+      }
+    }
+  }
+
+  damageBox(r, c, t) {
+    t.hits--;
+    this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
+    this.doShake(4);
+    if (t.hits <= 0) { // breaks open: a bomb sits where the box was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'bomb', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.box++;
+      this.callout('📦 Box cracked — bomb inside!');
+    }
+  }
+
+  lightSafe(r, c, t, color) {
+    if (color === undefined || color === null || color < 0 || t.lit.includes(color)) return;
+    t.lit.push(color);
+    this.addFx(r, c, '🔓', 'emoji');
+    const need = Math.min(CONFIG.BLOCKER_COLOR_SAFE_COLORS_REQUIRED, this.opts.colours);
+    if (t.lit.length >= need) { // opens: a lightning sits where the safe was
+      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                           special: 'lightning', dir: null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.segBlockers.safe++;
+      this.callout('🔓 Safe opened — lightning inside!');
+      this.doShake(8);
+      this.addWave(r, c, 4, 0);
+    }
+  }
+
+  // Water removal chain-clears the orthogonally connected puddle. 0 points.
+  // Emptying the board of water in one move pays 2 random special pieces.
+  removeWaterChain(r, c) {
+    const stack = [[r, c]];
+    while (stack.length) {
+      const [rr, cc] = stack.pop();
+      const t = this.board[rr] && this.board[rr][cc];
+      if (!t || t.blocker !== 'water') continue;
+      this.board[rr][cc] = this.makeTile(this.rollRefillColor());
+      this.board[rr][cc].fresh = true;
+      this.segBlockers.water++;
+      this.addFx(rr, cc, '💧', 'emoji');
+      for (const [dr, dc] of DIRS4) stack.push([rr + dr, cc + dc]);
+    }
+    this.waterClearedThisMove = true;
+  }
+
+  waterCount() { return this.blockerCount('water'); }
+
+  // Spread: after the move fully resolves (cascades included) each water
+  // tile claims one random valid orthogonal neighbour — never specials,
+  // chests, Chomper, other blockers, or cells carrying food/marks/piñatas/
+  // triples. A puddle with nowhere to go sits still that move.
+  waterSpread() {
+    const waters = [];
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].blocker === 'water') waters.push({ r, c });
+    let spread = false;
+    for (const w of waters) {
+      const cands = [];
+      for (const [dr, dc] of DIRS4) {
+        const r = w.r + dr, c = w.c + dc, k = K(r, c);
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) continue;
+        if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) continue;
+        const t = this.board[r][c];
+        if (!t || t.special || this.protectedTile(t)) continue; // normal coloured tiles only
+        cands.push({ r, c });
+      }
+      if (!cands.length) continue;
+      const p = cands[Math.floor(this.rng() * cands.length)];
+      const nw = { id: this.tileId++, color: -4, blocker: 'water', special: null, dir: null, countdown: null, fresh: true, ripple: true };
+      this.board[p.r][p.c] = nw;
+      setTimeout(() => { delete nw.ripple; this.render(); }, 700);
+      spread = true;
+    }
+    if (spread) { this.render(); this.doShake(3); }
+  }
+
+  // All-clear bonus: 2 random special pieces on random interior normal tiles.
+  waterAllClearBonus() {
+    this.callout('🌊 Water cleared — bonus specials!');
+    let placed = 0, guard = 0;
+    while (placed < CONFIG.BLOCKER_WATER_BONUS_SPECIALS && guard++ < 300) {
+      const r = 1 + Math.floor(this.rng() * (this.rows - 2)), c = 1 + Math.floor(this.rng() * (this.cols - 2));
+      const t = this.board[r][c];
+      if (!t || t.special || this.protectedTile(t)) continue;
+      const type = ['bomb', 'arrow', 'lightning'][Math.floor(this.rng() * 3)];
+      this.board[r][c] = { id: this.tileId++, color: t.color, special: type,
+                           dir: type === 'arrow' ? (this.rng() < 0.5 ? 'h' : 'v') : null,
+                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+      this.addFx(r, c, '✨', 'emoji');
+      placed++;
+    }
   }
 
   /* --------------------------- Per-move drip -----------------------------
@@ -602,6 +1446,7 @@ class PersistentGame extends Game {
     else if (pick.id === 'pinata') this.spawnPinata();
     else if (pick.id === 'tripletile') this.spawnTriple();
     else if (pick.id === 'chests') this.pendingChests++;
+    else if (pick.id === 'buffet') this.topUpFood(); // extra snacks land instantly
   }
 
   spawnMark() {
@@ -612,6 +1457,7 @@ class PersistentGame extends Game {
       if ((r === 0 || r === this.rows - 1) && (c === 0 || c === this.cols - 1)) continue;
       const k = K(r, c);
       if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) continue;
+      if (this.foodCells.has(k)) continue; // marked cells would wall Chomper off his snacks
       this.marks.add(k);
       this.addFx(r, c, '🔄', 'emoji');
       return true;
@@ -754,27 +1600,362 @@ function StatsPanel() {
   </div>`;
 }
 
-// Player-facing menu is just logo + CTA; seed/toggles/stats live in a
-// collapsed DEV drawer (CD, 2026-08-31 — match-quest dev-drawer pattern).
-function MenuScreen({ G }) {
-  const [seed, setSeed] = React.useState(() => String(1 + Math.floor(Math.random() * 999999999)));
-  const [dev, setDev] = React.useState(false);
-  return h`<div className="screen menu">
-    ${SKIN.has('logo')
-      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
-      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
-    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
-    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
-    <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
-    ${dev ? h`<div className="dev-drawer">
-      <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
-      <${Toggle} G=${G} />
-      <${ColourToggle} G=${G} />
+/* ============================ BOARD HUB UI =================================
+   The board-game meta screen — rendered whenever no run is active (phase
+   'menu'). All meta state lives in META (persisted); React state here is
+   purely presentational (die face, popups, hop animation, toasts). */
+
+// Position of space i on the loop, in % of the square board container —
+// clockwise from Home at 12 o'clock.
+function spaceXY(i) {
+  const a = (i / CONFIG.BOARD_SPACES) * Math.PI * 2 - Math.PI / 2;
+  return { x: 50 + 43.5 * Math.cos(a), y: 50 + 43.5 * Math.sin(a) };
+}
+
+function rollMystery() {
+  const r = Math.random();
+  if (r < 0.45) return { kind: 'coins', coins: randInt(CONFIG.MYSTERY_COINS_MIN, CONFIG.MYSTERY_COINS_MAX) };
+  if (r < 0.80) { const ids = Object.keys(CONSUMABLES); return { kind: 'consumable', item: ids[Math.floor(Math.random() * ids.length)] }; }
+  return { kind: 'dice', dice: 1 };
+}
+
+// Active run modifiers as small icon chips (board preview + in-run HUD).
+function RunModChips({ mods, label }) {
+  if (!mods || !mods.length) return null;
+  const byId = new Map();
+  for (const m of mods) {
+    if (!RUN_MODIFIERS[m.id]) continue;
+    byId.set(m.id, (byId.get(m.id) || 0) + 1);
+  }
+  return h`<div className="runmods">
+    ${label ? h`<span className="runmods-label">${label}</span>` : null}
+    ${[...byId].map(([id, count]) => {
+      const d = RUN_MODIFIERS[id];
+      return h`<span key=${id} className=${'chip modchip' + (d.negative ? ' negative' : '')} title=${`${d.name} — ${d.desc}`}>
+        ${d.icon}${count > 1 ? h`<b>×${count}</b>` : null}
+      </span>`;
+    })}
+  </div>`;
+}
+
+function ConsumableRow() {
+  const inv = META.state.consumables;
+  return h`<span className="binv">
+    ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} className=${'binv-item' + (inv[c.id] ? '' : ' none')} title=${c.name}>
+      ${c.icon}<b>${inv[c.id] || 0}</b>
+    </span>`)}
+  </span>`;
+}
+
+/* ----- Mini-game: coin flip — one tap, heads 30 / tails 15 */
+function CoinFlipGame({ onDone }) {
+  const [state, setState] = React.useState('ready'); // ready | flipping | done
+  const [heads, setHeads] = React.useState(false);
+  const flip = () => {
+    if (state !== 'ready') return;
+    const isHeads = Math.random() < 0.5;
+    setHeads(isHeads);
+    setState('flipping');
+    setTimeout(() => {
+      META.addCoins(isHeads ? CONFIG.COIN_FLIP_HEADS : CONFIG.COIN_FLIP_TAILS);
+      setState('done');
+    }, 950);
+  };
+  const coins = heads ? CONFIG.COIN_FLIP_HEADS : CONFIG.COIN_FLIP_TAILS;
+  return h`<div className="minigame-body">
+    <div className=${'flipcoin' + (state === 'flipping' ? ' flipping' : '') + (state === 'done' ? (heads ? ' heads' : ' tails') : '')}
+      onClick=${flip}>${state === 'done' ? (heads ? '👑' : '🌙') : '🪙'}</div>
+    ${state === 'ready' ? h`<button className="primary" onClick=${flip}>Flip!</button>` : null}
+    ${state === 'done' ? h`<div className="mg-result">${heads ? 'Heads' : 'Tails'}! <b className="gold">+${coins} 🪙</b></div>` : null}
+    ${state === 'done' ? h`<button className="primary" onClick=${onDone}>Collect</button>` : null}
+  </div>`;
+}
+
+/* ----- Mini-game: scratch card — 3 tiles; 3 same = jackpot, 2 same = medium,
+   no match still pays the small consolation. */
+const SCRATCH_SYMBOLS = ['🍒', '💎', '⭐'];
+function ScratchGame({ onDone }) {
+  const [tiles] = React.useState(() => Array.from({ length: 3 }, () => SCRATCH_SYMBOLS[Math.floor(Math.random() * SCRATCH_SYMBOLS.length)]));
+  const [shown, setShown] = React.useState([false, false, false]);
+  const paid = React.useRef(false);
+  const done = shown.every(Boolean);
+  let payout = CONFIG.SCRATCH_CARD_SMALL, tier = 'no match';
+  const counts = {};
+  for (const t of tiles) counts[t] = (counts[t] || 0) + 1;
+  const best = Math.max(...Object.values(counts));
+  if (best === 3) { payout = CONFIG.SCRATCH_CARD_JACKPOT; tier = 'JACKPOT'; }
+  else if (best === 2) { payout = CONFIG.SCRATCH_CARD_MEDIUM; tier = 'pair'; }
+  if (done && !paid.current) { paid.current = true; META.addCoins(payout); }
+  const reveal = i => setShown(s => s.map((v, j) => (j === i ? true : v)));
+  return h`<div className="minigame-body">
+    <div className="scratch-row">
+      ${tiles.map((t, i) => h`<button key=${i} className=${'scratch-tile' + (shown[i] ? ' shown' : '')}
+        onClick=${() => reveal(i)}>${shown[i] ? t : '▚'}</button>`)}
+    </div>
+    ${done
+      ? h`<div className="mg-result">${tier === 'JACKPOT' ? '🎉 JACKPOT! ' : tier === 'pair' ? 'A pair! ' : 'No match — '}<b className="gold">+${payout} 🪙</b></div>
+          <button className="primary" onClick=${onDone}>Collect</button>`
+      : h`<div className="mg-hint">Scratch all three tiles</div>`}
+  </div>`;
+}
+
+/* ----- Mystery box — tap to open, then the reward pops out */
+function MysteryBox({ reward, onDone }) {
+  const [open, setOpen] = React.useState(false);
+  const applied = React.useRef(false);
+  const doOpen = () => {
+    if (open) return;
+    if (!applied.current) {
+      applied.current = true;
+      if (reward.kind === 'coins') META.addCoins(reward.coins);
+      else if (reward.kind === 'consumable') META.addConsumable(reward.item);
+      else META.addDice(reward.dice);
+    }
+    setOpen(true);
+  };
+  return h`<div className="minigame-body">
+    ${!open
+      ? h`<div className="mystery-box" onClick=${doOpen}>🎁</div><button className="primary" onClick=${doOpen}>Open it</button>`
+      : h`<div className="mystery-reveal">
+            ${reward.kind === 'coins' ? h`<div className="mg-bigicon">🪙</div><div className="mg-result"><b className="gold">+${reward.coins} coins</b></div>`
+            : reward.kind === 'consumable' ? h`<div className="mg-bigicon">${CONSUMABLES[reward.item].icon}</div><div className="mg-result"><b>${CONSUMABLES[reward.item].name}</b> added to your kit</div>`
+            : h`<div className="mg-bigicon">🎲</div><div className="mg-result"><b className="gold">+${reward.dice} die</b></div>`}
+          </div>
+          <button className="primary" onClick=${onDone}>Collect</button>`}
+  </div>`;
+}
+
+/* ----- The landing popup — one overlay, body switches on space type */
+function SpaceRevealPopup({ ui, world, onClose }) {
+  const t = SPACE_TYPES[ui.type] || SPACE_TYPES.empty;
+  const body = (() => {
+    switch (ui.type) {
+      case 'coin': return h`<div className="mg-bigicon">🪙</div><div className="mg-result"><b className="gold">+${ui.coins} coins</b></div><button className="primary" onClick=${onClose}>Collect</button>`;
+      case 'consumable': return h`<div className="mg-bigicon">${CONSUMABLES[ui.item].icon}</div><div className="mg-result"><b>${CONSUMABLES[ui.item].name}</b> added to your kit</div><button className="primary" onClick=${onClose}>Take it</button>`;
+      case 'modifier': {
+        const d = RUN_MODIFIERS[ui.mod];
+        return h`<div className="mg-bigicon">${d.icon}</div><div className="mg-title">${d.name}</div><p className="mg-desc">${d.desc}</p><p className="mg-sub">Active for your next run only</p><button className="primary" onClick=${onClose}>Nice</button>`;
+      }
+      case 'mystery': return h`<${MysteryBox} reward=${ui.reward} onDone=${onClose} />`;
+      case 'minigame_flip': return h`<${CoinFlipGame} onDone=${onClose} />`;
+      case 'minigame_scratch': return h`<${ScratchGame} onDone=${onClose} />`;
+      case 'metaoffer': { // v11: auto-applied on landing — a net positive needs no decline
+        const offer = META_POWERUPS[ui.offer];
+        return h`<div className="mg-bigicon">${offer.icon}</div><div className="mg-title">${offer.name}</div><div className="mg-result gold">${offer.desc}</div><button className="primary" onClick=${onClose}>Collect</button>`;
+      }
+      case 'landmark': return h`<div className="mg-bigicon">🏠</div><div className="mg-result">Welcome home — lap complete!</div><p className="mg-desc">+${CONFIG.LANDMARK_MOVE_BONUS} starting move banked for your next run.</p><button className="primary" onClick=${onClose}>Onward</button>`;
+      default: return h`<button className="primary" onClick=${onClose}>OK</button>`;
+    }
+  })();
+  return h`<div className="overlay"><div className=${'panel spacepanel sp-' + t.cls}>
+    <div className="sp-label">${t.label}</div>
+    ${body}
+  </div></div>`;
+}
+
+/* ----- Boss offer / pre-run announcement — landing on the boss space */
+function BossOfferPanel({ world, onFight, onFlee }) {
+  return h`<div className="overlay"><div className="panel spacepanel sp-boss">
+    <div className="sp-label">BOSS</div>
+    <div className="mg-bigicon boss-icon">${world.boss.icon}</div>
+    <div className="mg-title">${world.boss.name}</div>
+    <p className="mg-desc">World ${world.id} boss run — reach the final flag to clear it and advance to the next world.</p>
+    <div className="boss-mods">
+      ${world.boss.modifiers.map(id => {
+        const d = RUN_MODIFIERS[id];
+        return h`<div key=${id} className="boss-mod">${d.icon} <b>${d.name}</b> — ${d.desc.replace('BOSS: ', '')}</div>`;
+      })}
+    </div>
+    <div className="mg-buttons">
+      <button className="primary danger" onClick=${onFight}>⚔️ Fight!</button>
+      <button onClick=${onFlee}>Not yet</button>
+    </div>
+  </div></div>`;
+}
+
+/* ----- The loop itself: 20 spaces + token, positioned around a circle.
+   hopMs scales the token's glide + bounce with the ×1/×2/×3 speed toggle. */
+function BoardLoop({ pos, hopKey, moving, hopMs }) {
+  const world = META.world();
+  const spaces = world.spaces.map((type, i) => {
+    const t = SPACE_TYPES[type];
+    const { x, y } = spaceXY(i);
+    return h`<div key=${i} style=${{ left: x + '%', top: y + '%' }}
+      className=${'bspace ' + t.cls + (i === pos ? ' here' : '')}
+      title=${t.label}>
+      <div className="bspace-in">${type === 'empty' ? world.icon : t.icon}</div>
+    </div>`;
+  });
+  const { x, y } = spaceXY(pos);
+  const ease = 'cubic-bezier(.3,.7,.35,1.1)';
+  return h`<div className="bloop">
+    <div className="bring"></div>
+    ${spaces}
+    <div className=${'btoken' + (moving ? ' moving' : '')}
+      style=${{ left: x + '%', top: y + '%', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
+      <div key=${hopKey} className="btoken-in" style=${{ animationDuration: hopMs + 'ms' }}>🧗</div>
+    </div>
+  </div>`;
+}
+
+/* ----- Board hub screen */
+function BoardScreen({ G }) {
+  const S = META.state;
+  const world = META.world();
+  const [ui, setUi] = React.useState({ mode: 'idle' }); // idle|rolling|moving|reveal|bossoffer
+  const [face, setFace] = React.useState(CONFIG.DIE_SIDES);
+  const [hopKey, setHopKey] = React.useState(0);
+  const [notes, setNotes] = React.useState([]);
+  const [seed, setSeed] = React.useState('');
+  const noteId = React.useRef(1);
+  const timers = React.useRef([]);
+  React.useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const later = (fn, ms) => timers.current.push(setTimeout(fn, ms));
+  const busy = ui.mode !== 'idle';
+  // ×1/×2/×3 board animation speed (dice tumble + token hops) — persisted,
+  // read live so mid-move toggles apply to the remaining steps.
+  const speed = () => S.boardSpeed || 1;
+  const spd = ms => Math.max(40, Math.round(ms / speed()));
+  const cycleSpeed = () => {
+    S.boardSpeed = speed() >= 3 ? 1 : speed() + 1;
+    META.save();
+    G.render();
+  };
+
+  const note = (text, cls = '') => {
+    const id = noteId.current++;
+    setNotes(n => [...n, { id, text, cls }]);
+    later(() => setNotes(n => n.filter(x => x.id !== id)), 2600);
+  };
+
+  const startRun = boss => {
+    const s = parseInt(seed, 10);
+    G.newRun(Number.isFinite(s) && s > 0 ? s : 1 + Math.floor(Math.random() * 999999999), { boss });
+  };
+
+  const roll = () => {
+    if (busy || S.dice <= 0) return;
+    META.addDice(-1); // spend the die up front
+    setUi({ mode: 'rolling' });
+    const result = 1 + Math.floor(Math.random() * CONFIG.DIE_SIDES);
+    let ticks = 0;
+    const spin = setInterval(() => {
+      setFace(1 + Math.floor(Math.random() * CONFIG.DIE_SIDES));
+      if (++ticks >= 6) {
+        clearInterval(spin);
+        setFace(result);
+        later(() => move(result), spd(240));
+      }
+    }, spd(55));
+    timers.current.push(spin); // clearTimeout on an interval id is a no-op-safe clear in browsers
+  };
+
+  const move = n => {
+    setUi({ mode: 'moving' });
+    let step = 0;
+    const hop = () => {
+      step++;
+      const wasUnlocked = META.bossUnlocked();
+      S.pos = (S.pos + 1) % CONFIG.BOARD_SPACES;
+      if (S.pos === 0) {
+        META.onLap();
+        note(`🏁 Lap ${S.laps} complete! +${CONFIG.LANDMARK_MOVE_BONUS} starting move next run`);
+        if (!wasUnlocked && META.bossUnlocked()) later(() => note(`👹 ${world.boss.name} has appeared on the board!`, 'danger'), 900);
+      }
+      META.save();
+      setHopKey(k => k + 1);
+      G.render();
+      if (step < n) later(hop, spd(270));
+      else later(() => landOn(S.pos), spd(380));
+    };
+    later(hop, spd(200));
+  };
+
+  // Land on a space: instant rewards are applied HERE, exactly once — the
+  // popup only displays them. Interactive spaces (mystery, mini-games)
+  // apply inside their component when the player acts.
+  const landOn = idx => {
+    const type = world.spaces[idx];
+    switch (type) {
+      case 'coin': {
+        const n = randInt(CONFIG.BOARD_COIN_REWARD_MIN, CONFIG.BOARD_COIN_REWARD_MAX);
+        META.addCoins(n);
+        setUi({ mode: 'reveal', type, coins: n });
+        break;
+      }
+      case 'consumable': {
+        const ids = Object.keys(CONSUMABLES);
+        const item = ids[Math.floor(Math.random() * ids.length)];
+        META.addConsumable(item);
+        setUi({ mode: 'reveal', type, item });
+        break;
+      }
+      case 'modifier': {
+        const id = world.modifierPool[Math.floor(Math.random() * world.modifierPool.length)];
+        META.addModifier(id);
+        setUi({ mode: 'reveal', type, mod: id });
+        break;
+      }
+      case 'mystery': setUi({ mode: 'reveal', type, reward: rollMystery() }); break;
+      case 'metaoffer': { // v11: net positive — applied on the spot, no accept/decline
+        const offer = world.metaOffers[Math.floor(Math.random() * world.metaOffers.length)];
+        META_POWERUPS[offer].apply();
+        setUi({ mode: 'reveal', type, offer });
+        break;
+      }
+      case 'minigame_flip':
+      case 'minigame_scratch':
+      case 'landmark': setUi({ mode: 'reveal', type }); break;
+      default: setUi({ mode: 'idle' }); // empty space — dead beat, nothing happens (v11: flavour cut)
+    }
+  };
+
+  const close = () => { setUi({ mode: 'idle' }); G.render(); };
+  const bossReady = META.bossUnlocked();
+
+  return h`<div className="screen board-screen">
+    <div className="bhead">
+      <div className="bworld">${world.icon} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
+      <div className="bwallet"><span className="bcoins">🪙 ${S.coins}</span><${ConsumableRow} /></div>
+    </div>
+    ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
+    <${RunModChips} mods=${S.modifiers} label="Next run:" />
+    <div className="bboard">
+      <button className="bspeed" title="Board animation speed" onClick=${cycleSpeed}>⏩ ×${speed()}</button>
+      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
+      <div className="bhub">
+        <div className="bdice-count">🎲 <b>${S.dice}</b></div>
+        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '')}
+          style=${ui.mode === 'rolling' ? { animationDuration: spd(280) + 'ms' } : null}>${face}</div>
+        <button className="primary broll" disabled=${busy || S.dice <= 0} onClick=${roll}>
+          ${S.dice > 0 ? 'Roll 🎲' : 'No dice'}
+        </button>
+        <button className="bbuy" disabled=${busy || S.coins < CONFIG.DICE_PRICE_COINS}
+          onClick=${() => { if (META.buyDie()) { note('🎲 +1 die!'); G.render(); } }}>
+          +1 🎲 for ${CONFIG.DICE_PRICE_COINS} 🪙
+        </button>
+        <div className="blaps">🏁 Lap ${S.laps}</div>
+        <div className=${'bboss-progress' + (bossReady ? ' ready' : '')}>
+          👹 ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'READY' : `${S.worldLaps}/${world.lapsForBoss} laps`}
+        </div>
+      </div>
+      <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
+    </div>
+    ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross checkpoint ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
+    ${bossReady
+      ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>⚔️ Fight ${world.boss.name}</button>`
+      : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>▶ Start run</button>`}
+    <details className="tester-tools">
+      <summary>🧪 Tester tools</summary>
+      <div className="menu-box">
+        <label>Seed <input value=${seed} placeholder="random" onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
+        <${Toggle} G=${G} />
+        <${ColourToggle} G=${G} />
+      </div>
       <${StatsPanel} />
-    </div>` : null}
-    <div className="end-art menu-art">${SKIN.has('menu.art')
-      ? h`<img className="skin-img" src=${SKIN.url('menu.art')} alt="" />`
-      : h`<span className="end-art-label">menu.art</span>`}</div>
+    </details>
+    ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} />` : null}
+    ${ui.mode === 'bossoffer' ? h`<${BossOfferPanel} world=${world} onFight=${() => startRun(true)} onFlee=${close} />` : null}
   </div>`;
 }
 
@@ -815,6 +1996,7 @@ function Board({ G }) {
     if (G.fast) { G.fast = false; G.render(); }
     const cl = cellAt(e);
     if (!cl) return;
+    if (G.armed) { G.useConsumable(G.armed, cl); return; } // consumable targeting eats the tap
     drag.current = { ...cl, x: e.clientX, y: e.clientY, fired: false };
   };
   const onMove = e => {
@@ -852,7 +2034,7 @@ function Board({ G }) {
     // the back aligns with the piece's body, not its upper face (CD)
     const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
-      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
+      className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '') + (G.foodCells.has(cellKey) ? ' foodc' : '')}
       style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
@@ -874,6 +2056,7 @@ function Board({ G }) {
     const pieceSlot = 'piece.' + SKIN.PIECE_SLOTS[t.color];
     const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
       : t.chest ? slotImg('tile.chest', 'piece-img')
+      : t.blocker ? slotImg('tile.blocker.' + t.blocker, 'piece-img') // v10 art slots; CSS+emoji fallback below
       : ((G.mods.boosts[t.color] || 0) > 0 && slotImg(pieceSlot + '.boosted', 'piece-img'))
         || slotImg(pieceSlot, 'piece-img');
     const spArt = t.special ? slotImg(specialSlot, 'sp-img') : null;
@@ -881,11 +2064,17 @@ function Board({ G }) {
     // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
     tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : t.blocker ? 'blocker ' + t.blocker + (t.blocker === 'box' ? ' hits' + Math.max(1, t.hits) : '') + (t.ripple ? ' ripple' : '') : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
         ${art}
         ${spArt}
         ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
+        ${!art && t.blocker === 'box' ? h`<span className="spe">📦</span>` : null}
+        ${!art && t.blocker === 'water' ? h`<span className="spe">💧</span>` : null}
+        ${!art && t.blocker === 'safe' ? h`<span className="spe">🔒</span>` : null}
+        ${t.blocker === 'box' ? h`<span className="cd">${Math.max(0, t.hits)}</span>` : null}
+        ${t.blocker === 'safe' ? h`<span className="safeslots">${Array.from({ length: G.opts.colours }, (_, i) =>
+          h`<span key=${i} className=${'safeslot bgdot' + i + (t.lit.includes(i) ? ' lit' : '')}></span>`)}</span>` : null}
         ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
         ${!spArt && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
@@ -914,6 +2103,11 @@ function Board({ G }) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
       style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
+  }
+  for (const k of G.foodCells) {
+    const [r, c] = k.split(',').map(Number);
+    cellmarks.push(h`<div key=${'fd' + k} className="cellmark food"
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.food', 'mark-img') || '🍖'}</div>`);
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
@@ -1004,6 +2198,31 @@ function MomentumMeter({ G }) {
   </div>`;
 }
 
+// In-run consumable buttons — hammer/bomb arm a board tap, shuffle fires
+// immediately. Inventory is the persistent META stash (spent for good).
+function ConsumableBar({ G }) {
+  const inv = META.state.consumables;
+  if (!Object.values(inv).some(n => n > 0)) return null;
+  const arm = kind => {
+    if (G.phase !== 'level' || G.busy || !(inv[kind] > 0)) return;
+    if (kind === 'shuffle') { G.useConsumable('shuffle'); return; }
+    G.armed = G.armed === kind ? null : kind; // toggle = cancel
+    G.render();
+  };
+  return h`<div className="consbar">
+    ${G.armed ? h`<div className="cons-hint">${G.armed === 'hammer' ? '🔨 Tap a tile to smash it' : '🧨 Tap a tile to blast the area'} — tap again to cancel</div>` : null}
+    <div className="chip-row">
+      ${Object.values(CONSUMABLES).map(c => h`<button key=${c.id}
+        className=${'chip consbtn' + (G.armed === c.id ? ' active' : '')}
+        disabled=${!(inv[c.id] > 0) || G.busy}
+        title=${c.name}
+        onClick=${() => arm(c.id)}>
+        ${c.icon}<b>${inv[c.id] || 0}</b>
+      </button>`)}
+    </div>
+  </div>`;
+}
+
 function LevelScreen({ G }) {
   const cps = G.checkpoints();
   const idx = G.run.checkpointIdx;
@@ -1016,6 +2235,7 @@ function LevelScreen({ G }) {
   return h`<div className="screen level-screen">
     <div className="board-stack">
       <div className="hud">
+        ${G.bossRun ? h`<span className="hud-boss" title="Boss run">👹</span>` : null}
         <div className=${'hud-moves-box' + (G.movesLeft <= 3 ? ' low' : '')}>
           <span className="hmb-label">Moves</span>
           <b className="hmb-num">${G.movesLeft}</b>
@@ -1034,8 +2254,10 @@ function LevelScreen({ G }) {
         ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
           onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
-      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '')}
+      <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '') + (G.armed ? ' aiming' : '')}
         style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 96 fill / 20px stretch`, borderWidth: '20px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '6px' } : null}><${Board} G=${G} /></div>
+      <${ConsumableBar} G=${G} />
+      <${RunModChips} mods=${G.runMods} />
       <div className="meters">
         <${FillupMeter} G=${G} />
         <${MomentumMeter} G=${G} />
@@ -1047,7 +2269,7 @@ function LevelScreen({ G }) {
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel goal-panel">
         <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves${cp.final ? ' — final goal cleared! The endless chase begins 🔥' : ''}</p>
+        <p>+${cp.moves} moves</p>
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}
@@ -1060,8 +2282,9 @@ function LevelScreen({ G }) {
 function InlineDraft({ G }) {
   return h`<div className="overlay draft-overlay">
     <div className="draft-sheet">
-      <div className="draft-sub">${G.run.checkpointIdx > 0 ? `Goal ${G.run.checkpointIdx}` : 'The run begins'}</div>
+      <div className="draft-sub">${G.bossRun ? '👹 Boss run — ' : ''}${G.run.checkpointIdx > 0 ? `Goal ${G.run.checkpointIdx}` : 'The run begins'}</div>
       <div className="draft-title">Pick a Spell</div>
+      <${RunModChips} mods=${G.runMods} label=${G.runMods.length && G.run.checkpointIdx === 0 ? 'This run:' : null} />
       <div className="cards">
         ${G.offers.map((o, i) => h`<${DraftCard} key=${i} G=${G} o=${o} i=${i} />`)}
       </div>
@@ -1078,11 +2301,23 @@ function EndScreen({ G }) {
     try { await navigator.clipboard.writeText(JSON.stringify(telemetryAll())); setCopied(true); setTimeout(() => setCopied(false), 2500); }
     catch (e) { setShowRaw(true); }
   };
+  const rw = G.runReward;
   return h`<div className="screen end">
-    <div className="end-sub">${win ? '🏆 Summit reached — endless chase complete!' : '💀 Out of moves'}</div>
-    <h1>Cleared ${G.run.checkpointIdx} ${G.run.checkpointIdx === 1 ? 'goal' : 'goals'}!</h1>
+    <div className="end-sub">${win ? (G.bossRun ? '⚔️ Boss cleared!' : '🏆 Summit reached!') : '💀 Out of moves'}</div>
+    <h1>Cleared ${G.run.checkpointIdx} / ${G.checkpoints().length} ${G.checkpoints().length === 1 ? 'goal' : 'goals'}!</h1>
+    ${rw && rw.bossCleared ? h`<div className="end-boss">
+      ${rw.worldAdvanced
+        ? `👹 ${'→'} 🌍 World ${META.state.world} unlocked — new power-ups join the draft pool!`
+        : '👑 Final boss down — every world cleared!'}
+    </div>` : null}
+    ${G.bossRun && !win ? h`<div className="end-boss lost">👹 The boss stands — challenge it again from the board.</div>` : null}
     <div className="end-stats">
       <div><b>${G.score}</b> final score</div>
+      ${win ? h`<div className="end-spare">👟 <b>${Math.max(0, G.movesLeft)}</b> ${G.movesLeft === 1 ? 'move' : 'moves'} to spare</div>` : null}
+      <div className=${'end-dice' + (rw && rw.dice > 0 ? ' won' : '')}>
+        ${rw && rw.dice > 0 ? h`🎲 <b>+${rw.dice}</b> ${rw.dice === 1 ? 'die' : 'dice'} earned` : '🎲 no dice this time'}
+        <span className="end-dice-total"> — ${META.state.dice} banked</span>
+      </div>
       <div className="seedline">seed ${G.seed}</div>
     </div>
     ${chips.length ? h`<div className="build">
@@ -1092,7 +2327,7 @@ function EndScreen({ G }) {
       </span>`)}</div>
     </div>` : null}
     <div className="end-buttons">
-      <button className="primary" onClick=${() => G.newRun(1 + Math.floor(Math.random() * 999999999))}>Play again</button>
+      <button className="primary" onClick=${() => G.backToBoard()}>🎲 Back to board</button>
       <div className="end-secondary">
         <button onClick=${() => G.newRun(G.seed)}>Replay this seed</button>
         <button onClick=${copy}>${copied ? '✅ Copied' : '📤 Copy my play data'}</button>
@@ -1114,7 +2349,7 @@ function App() {
     // Debug / test handles (used by scripted verification, harmless in play)
     const G = ref.current;
     window.RL = {
-      game: G, CONFIG, POWERUPS,
+      game: G, CONFIG, POWERUPS, META, WORLDS,
       telemetry: { all: telemetryAll, summary: telemetrySummary, clear: telemetryClear },
       cheat: {
         // jump the score to the next checkpoint (base game's cheat.win analogue)
@@ -1123,12 +2358,18 @@ function App() {
         addScore(n) { G.score += n; G.checkLevelEnd(); G.render(); },
         setMoves(n) { G.movesLeft = n; G.render(); },
         pick(id, color) { G.run.picks.push(color !== undefined ? { id, color } : { id }); G.computeMods(); G.render(); },
+        // --- board meta cheats ---
+        dice(n) { META.state.dice = Math.max(0, n); META.save(); G.render(); },
+        coins(n) { META.state.coins = n; META.save(); G.render(); },
+        lap(n = 1) { for (let i = 0; i < n; i++) META.onLap(); G.render(); },
+        world(w) { META.state.world = Math.max(1, Math.min(WORLDS.length, w)); META.state.worldLaps = 0; META.state.pos = 0; META.save(); G.render(); },
+        resetMeta() { try { localStorage.removeItem(META_KEY); } catch (e) {} location.reload(); },
       },
     };
   }
   const G = ref.current;
   let screen;
-  if (G.phase === 'menu') screen = h`<${MenuScreen} G=${G} />`;
+  if (G.phase === 'menu') screen = h`<${BoardScreen} G=${G} />`; // the board-game hub
   // Every draft — the run-start one included — renders as an overlay inside
   // LevelScreen, so the board is always in view while picking.
   else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
