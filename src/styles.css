@@ -594,7 +594,6 @@ button.primary {
   position: absolute; left: 0; right: 0; bottom: 0; height: 250px;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
   background: linear-gradient(180deg, rgba(23, 17, 48, 0), rgba(139, 92, 246, .12));
-  border-top: 1px dashed var(--border-strong);
 }
 .end-art .skin-img { object-fit: cover; }
 .end-art-label { font-family: monospace; font-size: 12px; letter-spacing: .12em; color: var(--text-ghost); }
