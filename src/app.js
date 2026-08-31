@@ -659,16 +659,22 @@ function puIcon(id) {
   return slotImg('icon.powerup.' + id, 'pu-img') || POWERUPS[id].icon;
 }
 
-function useCellSize(cols) {
-  // board sizes to the phone frame (.phone, 430px), not the raw viewport;
-  // the 46px offset covers screen padding + the board's external frame
-  const calc = () => Math.max(30, Math.min(56, Math.floor((Math.min(window.innerWidth, 430) - 46) / cols)));
+function useCellSize(cols, rows) {
+  // Fit the board inside the phone frame in BOTH axes: width minus screen
+  // padding (24) + board.frame border/padding (52); height minus HUD, meters,
+  // power bar and gaps (~340). Recomputed on expand picks, not just resize.
+  const calc = () => {
+    const availW = Math.min(window.innerWidth, 430) - 76;
+    const availH = Math.min(window.innerHeight, 932) - 340;
+    return Math.max(24, Math.min(56, Math.floor(availW / cols), Math.floor(availH / rows)));
+  };
   const [s, setS] = React.useState(calc);
   React.useEffect(() => {
+    setS(calc()); // expand picks change cols/rows without a window resize
     const f = () => setS(calc());
     window.addEventListener('resize', f);
     return () => window.removeEventListener('resize', f);
-  }, [cols]);
+  }, [cols, rows]);
   return s;
 }
 
@@ -790,7 +796,7 @@ function DraftCard({ G, o, i }) {
 }
 
 function Board({ G }) {
-  const cell = useCellSize(G.cols);
+  const cell = useCellSize(G.cols, G.rows);
   const [sel, setSel] = React.useState(null);
   const drag = React.useRef(null);
 
