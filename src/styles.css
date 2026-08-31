@@ -339,6 +339,12 @@ button.primary {
 .cellmark.triple { border: 1px solid #58e0d0; color: #8df0e4; }
 
 .tile { position: absolute; padding: 2.5px; transition: transform .22s cubic-bezier(.3,.7,.35,1.1); will-change: transform; }
+/* slot art inside a tile: rendered AS-IS — the CSS plate disappears under it */
+.piece-img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.tin.skinned { background: none; box-shadow: none; }
+.tin.sp.skinned { box-shadow: 0 0 10px rgba(255, 255, 255, .5); } /* keep the special glow for readability */
+.cellmark .mark-img { width: 14px; height: 14px; object-fit: contain; }
+.bgcell .skin-img { width: 68%; height: 68%; }
 .tin {
   width: 100%; height: 100%; border-radius: 9px; position: relative;
   display: flex; align-items: center; justify-content: center;

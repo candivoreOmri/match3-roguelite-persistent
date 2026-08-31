@@ -649,6 +649,12 @@ class PersistentGame extends Game {
 /* ================================== UI ==================================== */
 const h = htm.bind(React.createElement);
 
+// Slot art helper: an <img> for the slot when the manifest has it, else null
+// (caller renders its emoji/CSS fallback). See ASSET_MANIFEST.md.
+function slotImg(id, cls) {
+  return SKIN.has(id) ? h`<img className=${cls || 'skin-img'} src=${SKIN.url(id)} alt="" />` : null;
+}
+
 function useCellSize(cols) {
   // board sizes to the phone frame (.phone, 430px), not the raw viewport;
   // the 46px offset covers screen padding + the board's external frame
@@ -826,7 +832,7 @@ function Board({ G }) {
     bg.push(h`<div key=${'b' + r + '_' + c}
       className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '')}
       style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px' }}>
-      ${G.marks.has(cellKey) ? '🔄' : ''}
+      ${G.marks.has(cellKey) ? (slotImg('marker.xtramove') || '🔄') : ''}
     </div>`);
     const t = G.board[r][c];
     if (!t) continue;
@@ -836,12 +842,22 @@ function Board({ G }) {
     const tileStyle = { transform: `translate(${c * cell}px,${y}px)`, width: cell + 'px', height: cell + 'px' };
     // falling tiles: duration scales with drop distance, spring easing lands with a bounce
     if (t.fallDist) tileStyle.transition = `transform ${G.fallDur(t.fallDist)}ms cubic-bezier(.22,.9,.28,1.4)`;
+    // slot art per tile kind: CD art renders AS-IS (no plate, no tint behind
+    // it — match-quest rule); missing slots keep the emoji/CSS fallback.
+    const specialSlot = t.special
+      ? (t.special === 'arrow' ? 'special.arrow-' + (t.dir === 'h' ? 'h' : 'v') : 'special.' + t.special)
+      : null;
+    const art = t.chomper ? slotImg('tile.chomper', 'piece-img')
+      : t.chest ? slotImg('tile.chest', 'piece-img')
+      : t.special ? slotImg(specialSlot, 'piece-img')
+      : slotImg('piece.' + SKIN.PIECE_SLOTS[t.color], 'piece-img');
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
         style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
-        ${t.chomper ? h`<span className="spe">😬</span>` : null}
-        ${t.chest ? h`<span className="spe">🎁</span>` : null}
-        ${t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
+        ${art}
+        ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
+        ${!art && t.chest ? h`<span className="spe">🎁</span>` : null}
+        ${!art && t.special ? h`<span className="spe">${t.special === 'arrow' ? (t.dir === 'h' ? '↔️' : '↕️') : SPECIAL_EMOJI[t.special]}</span>` : null}
         ${t.countdown !== null && t.special ? h`<span className="cd">${Math.max(0, t.countdown)}</span>` : null}
         ${(() => {
           // total value per piece: base 1 + colour boost (+ Special score when
@@ -856,12 +872,12 @@ function Board({ G }) {
   for (const [k, left] of G.pinatas) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'p' + k} className="cellmark pinata"
-      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>🪅<b>${left}</b></div>`);
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.pinata', 'mark-img') || '🪅'}<b>${left}</b></div>`);
   }
   for (const k of G.triples) {
     const [r, c] = k.split(',').map(Number);
     cellmarks.push(h`<div key=${'t' + k} className="cellmark triple"
-      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>×${CONFIG.TRIPLE_TILE_MULT}</div>`);
+      style=${{ left: c * cell + 'px', top: r * cell + 'px' }}>${slotImg('marker.triple', 'mark-img')}×${CONFIG.TRIPLE_TILE_MULT}</div>`);
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
