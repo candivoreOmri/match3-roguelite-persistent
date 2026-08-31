@@ -15,34 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 10, // v10: blockers — Static box, Water, Colour safe (checkpoint-gated, refill-pool spawns)
-
-  // Blockers: inert tiles cleared only through their own interaction (see
-  // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
-  // this branch's ongoing board generation — once run.checkpointIdx reaches
-  // its intro checkpoint; before that its chance is 0. Chances are per
-  // refill tile; caps bound how many of a type exist at once (drip-style —
-  // without them a 15% per-tile chance floods a persistent board).
-  BLOCKER_STATIC_BOX_CHANCE: 0.15,
-  BLOCKER_WATER_CHANCE: 0.08,
-  BLOCKER_COLOR_SAFE_CHANCE: 0.05,
-  BLOCKER_INTRO_CHECKPOINT_BOX: 3,
-  BLOCKER_INTRO_CHECKPOINT_WATER: 5,
-  BLOCKER_INTRO_CHECKPOINT_SAFE: 7,
-  BLOCKER_STATIC_BOX_HITS: 3,
-  BLOCKER_WATER_SPREAD_INTERVAL: 1,  // water spreads every Nth player move
-  BLOCKER_COLOR_SAFE_COLORS_REQUIRED: 4, // of 5 (all of them when fewer colours are active)
-  BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
-  BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
-
-  // Chomper food: cell-layer snacks only Chomper can consume, paying
-  // CHOMPER_FOOD_BONUS each. CHOMPER_FOOD_COUNT are ALWAYS on the board
-  // while Chomper is in the build — every eaten snack is replaced at a
-  // random valid interior cell the same move. Buffet adds more (stacks).
-  CHOMPER_FOOD_BONUS: 20,
-  CHOMPER_FOOD_COUNT: 2,           // snacks kept on the board at all times
-  CHOMPER_FOOD_SPAWN_DISTANCE: 4,  // first food lands 2..this (Manhattan) from Chomper
-  CHOMPER_BUFFET_TILES: 2,         // extra concurrent snacks per Buffet pick
+  BALANCE_VERSION: 18, // v18: blockers (box/water/safe) + square ×2 + chomper-first timing (on v17 food + v16 ease)
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -64,7 +37,11 @@ const CONFIG = {
   // a persistent board, so grants track observed per-segment need and the
   // middle checkpoints rose ~10%. Victory-lap grant halved (endless economy
   // self-extends: refunds/momentum/chests stretched 16 into 40-60-move laps).
-  CHECKPOINTS: [80, 250, 520, 900, 1500, 2500],
+  // v16 ease from live-v8 telemetry (124 segments): the v6 grant cuts made
+  // segments 2-3 a wall (45/46% clear, median 4 moves/segment played at ≤3
+  // left). Omri chose to ease CHECKPOINTS only, grants untouched: seg2 delta
+  // 170→150, seg3 270→220, all later segment DELTAS preserved exactly.
+  CHECKPOINTS: [80, 230, 450, 830, 1430, 2430],
   START_MOVES: 10,                 // opening move pool
   // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
   // each segment's grant now sits ~2 under its observed median moves-used,
