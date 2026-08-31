@@ -1951,6 +1951,18 @@ function BoardScreen({ G }) {
         <label>Seed <input value=${seed} placeholder="random" onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
         <${Toggle} G=${G} />
         <${ColourToggle} G=${G} />
+        <div className="tt-worlds">
+          <span className="tt-label">Skip to world</span>
+          ${WORLDS.map(w => h`<button key=${w.id}
+            className=${'tt-world' + (S.world === w.id ? ' active' : '')}
+            disabled=${busy || S.world === w.id}
+            title=${`${w.name} — resets laps + board position, unlocks batch ${w.id}`}
+            onClick=${() => {
+              S.world = w.id; S.worldLaps = 0; S.pos = 0; META.save();
+              note(`🧪 Skipped to world ${w.id} — ${w.name}`);
+              G.render();
+            }}>${w.icon} ${w.id}</button>`)}
+        </div>
       </div>
       <${StatsPanel} />
     </details>

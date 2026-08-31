@@ -860,6 +860,12 @@ button.primary.danger { background: linear-gradient(135deg, #ff5a4c, #b3261e); b
 .end-dice-total { color: #7b8194; font-size: 12px; }
 
 /* tester tools (collapsed by default on the board hub) */
+.tt-worlds { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.tt-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); }
+.tt-world { font-size: 13px; padding: 6px 12px; border-radius: 10px; }
+.tt-world.active { border-color: var(--gold); color: var(--gold); opacity: 1; }
+.tt-world:disabled { opacity: .5; cursor: default; }
+.tt-world.active:disabled { opacity: 1; }
 .tester-tools { margin-top: 14px; text-align: center; }
 .tester-tools summary { color: #565c6e; font-size: 12px; cursor: pointer; list-style: none; }
 .tester-tools[open] summary { margin-bottom: 10px; }
