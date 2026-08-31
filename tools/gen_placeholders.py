@@ -279,6 +279,7 @@ def main():
     jobs['bg.main'] = ('app/bg-main.png', lambda: bg_main('bg.main'))
     jobs['logo'] = ('app/logo.png', lambda: logo('logo'))
     jobs['end.art'] = ('app/end-art.png', lambda: end_art('end.art'))
+    jobs['menu.art'] = ('app/menu-art.png', lambda: end_art('menu.art'))
     for slot, ch in [('icon.moves', '👟'), ('icon.flag', '🚩'), ('icon.momentum', '🚀'),
                      ('icon.fillup', '🔋'), ('icon.snowball', '❄️')]:
         jobs[slot] = (f'icons/{slot.split(".")[1]}.png', lambda s=slot, e=ch: emoji_icon(s, e))

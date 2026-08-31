@@ -764,8 +764,7 @@ function MenuScreen({ G }) {
       ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
       : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
     <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
-    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Start run</button>
-    <p className="hint">Swipe or tap two adjacent tiles to swap. Match 4 → arrow, 5 → lightning, L/T shape → bomb.</p>
+    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
     <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
     ${dev ? h`<div className="dev-drawer">
       <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
@@ -773,6 +772,9 @@ function MenuScreen({ G }) {
       <${ColourToggle} G=${G} />
       <${StatsPanel} />
     </div>` : null}
+    <div className="end-art menu-art">${SKIN.has('menu.art')
+      ? h`<img className="skin-img" src=${SKIN.url('menu.art')} alt="" />`
+      : h`<span className="end-art-label">menu.art</span>`}</div>
   </div>`;
 }
 

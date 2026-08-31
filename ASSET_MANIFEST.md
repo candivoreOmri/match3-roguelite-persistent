@@ -54,6 +54,7 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `icon.moves` | 👟 | 256×256 |
 | `icon.flag` | 🚩 (HUD + checkpoint) | 256×256 |
 | `end.art` | end-screen bottom art panel (placeholder gradient) | ~860×500, displayed 430×250 cover |
+| `menu.art` | start-screen bottom art panel | same spec as `end.art` |
 
 ## P2 — second wave
 
