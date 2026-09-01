@@ -410,6 +410,55 @@ Object.defineProperty(POWERUPS.blast, 'disabled', {
   },
 });
 
+
+/* --------------------------- Card copy pass -------------------------------
+   v21.1 (Omri, 2026-09-01): shorter, verb-first card text — one line per
+   power-up, numbers only where they change a decision. Edit freely; this
+   block is applied LAST so it wins over the mechanic patches above.
+   (Colour boost keeps its dynamic desc — it needs the rolled colour.) */
+const CARD_COPY = {
+  fillup:      () => 'Match boosted tiles to charge a +1 score multiplier (one charge — pick again for more)',
+  spawner:     () => 'Boosted matches can spawn special pieces (stacks)',
+  converter:   () => 'Every match you make turns one tile into your boosted colour',
+  spawnweight: () => 'Boosted colours drop in more often (stacks)',
+  purge:       () => 'Your 4+ matches clear that whole colour',
+  sweep:       () => 'Your vertical matches clear that whole colour',
+  snowcrush:   () => 'Destroy specials to charge the snowball — every full bar adds +3 to all your matches (stacks)',
+  snowpaint:   () => 'Boosted matches charge the snowball — every full bar adds +3 to all your matches',
+  bombchance:  () => 'New tiles can drop in as bombs (stacks)',
+  countdown:   () => ACTIVE_GAME && ACTIVE_GAME.run && ACTIVE_GAME.run.picks.some(p2 => p2.id === 'countdown')
+    ? 'Shorter fuse — specials now explode the move they appear'
+    : 'Specials explode on their own after 2 moves (pick again for a shorter fuse)',
+  blast:       () => 'Bombs blast one ring bigger (stacks)',
+  specialscore:() => 'Specials score +1 when they blow (stacks)',
+  rowclear:    () => 'Your sideways matches clear the whole row',
+  colclear:    () => 'Your up-down matches clear the whole column',
+  matryoshka:  () => 'Exploding specials leave a smaller special behind',
+  aftershock:  () => 'Explosions scorch nearby tiles — match one for a bonus blast',
+  fusionmove:  () => 'Merge two specials to get +1 move',
+  lava:        () => 'The bottom row melts away after every move',
+  expandrow:   () => 'The board grows by a row (stacks)',
+  expandcol:   () => 'The board grows by a column (stacks)',
+  xtramove:    () => 'Match over 🔄 tiles to get a move back (pick again for more tiles)',
+  square:      () => '2×2 squares count as matches and spawn a dynamite',
+  squarebomb:  () => 'Squares spawn a bomb instead',
+  squarescore: () => 'Square tiles score double',
+  momentum:    () => 'Make 4+ matches to get extra moves (stacks)',
+  pinata:      () => 'Piñatas appear — hit one 5 times for +50',
+  tripletile:  () => 'A ×3 tile appears — match over it to triple that whole move',
+  chests:      () => 'Chests drop in — carry them to the bottom for points or moves',
+  diagswap:    () => 'You can swap diagonally',
+  conveyor:    () => 'The board\'s outer ring rotates after every move',
+  chomper:     () => 'A hungry critter eats one piece after each move — 🍖 snacks pay +20, specials go boom',
+  twinchomper: () => 'A second Chomper joins the board',
+  doublebite:  () => 'Chomper takes an extra bite each move (stacks)',
+  gourmet:     () => 'Pieces Chomper eats score double',
+  spicytrail:  () => 'Chomper\'s trail stays scorched — match it for bonus blasts',
+  bombtrail:   () => 'Chomper leaves live bombs behind him',
+  buffet:      () => '2 more 🍖 snacks on the board (stacks)',
+};
+for (const [id, desc] of Object.entries(CARD_COPY)) if (POWERUPS[id]) POWERUPS[id].desc = desc;
+
 /* ========================== PERSISTENT GAME ================================
    Subclass seams (called by the shared engine):
      startLevel   — pickOffer lands here after every draft: first pick builds
