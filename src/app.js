@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 8, // v8: snowball split into Snow crusher (specials) + Snow painter (boosted matches), shared bar, +3/charge
+  BALANCE_VERSION: 16, // v16: checkpoint ease (live-v8 telemetry: seg2/3 clear rates 45/46%, median death in seg 2) — v9-15 skipped: stamps burned by parallel branch/board-meta builds
   VARIANT: 'persistent',           // stamped into telemetry so datasets never mix
 
   // Hard ceiling on BANKED moves (movesLeft can never exceed this). Grants,
@@ -37,7 +37,11 @@ const CONFIG = {
   // a persistent board, so grants track observed per-segment need and the
   // middle checkpoints rose ~10%. Victory-lap grant halved (endless economy
   // self-extends: refunds/momentum/chests stretched 16 into 40-60-move laps).
-  CHECKPOINTS: [80, 250, 520, 900, 1500, 2500],
+  // v16 ease from live-v8 telemetry (124 segments): the v6 grant cuts made
+  // segments 2-3 a wall (45/46% clear, median 4 moves/segment played at ≤3
+  // left). Omri chose to ease CHECKPOINTS only, grants untouched: seg2 delta
+  // 170→150, seg3 270→220, all later segment DELTAS preserved exactly.
+  CHECKPOINTS: [80, 230, 450, 830, 1430, 2430],
   START_MOVES: 10,                 // opening move pool
   // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
   // each segment's grant now sits ~2 under its observed median moves-used,
