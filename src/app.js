@@ -20,17 +20,22 @@ const CONFIG = {
   // NOTE: the board-meta line counted v9-v14 while the blockers/food line
   // independently counted v9-v10 — v15 is the first shared number after the
   // two branches merged (2026-09-01).
-  BALANCE_VERSION: 15, // v15: board-meta (dice/worlds/consumables) + blockers + chomper food, merged
+  BALANCE_VERSION: 16, // v16: blocker spawn rework (scattered boxes, per-segment water floods, box bombs 2-3)
 
   // Blockers: inert tiles cleared only through their own interaction (see
-  // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
-  // this branch's ongoing board generation — once run.checkpointIdx reaches
-  // its intro checkpoint; before that its chance is 0. Chances are per
-  // refill tile; caps bound how many of a type exist at once (drip-style —
-  // without them a 15% per-tile chance floods a persistent board).
-  BLOCKER_STATIC_BOX_CHANCE: 0.15,
-  BLOCKER_WATER_CHANCE: 0.08,
-  BLOCKER_COLOR_SAFE_CHANCE: 0.05,
+  // the BLOCKERS registry below CONFIG). Each type unlocks once
+  // run.checkpointIdx reaches its intro checkpoint. Spawn modes (v16 —
+  // Omri: refill-spawned blockers piled up at the top, next to each other):
+  //   box   → per-MOVE drip onto a random scattered board cell
+  //   water → ONE seeding event per checkpoint segment, 2-3 scattered puddles
+  //   safe  → still rides the refill pool (rare, cap 1)
+  BLOCKER_STATIC_BOX_CHANCE: 0.15,   // per move (drip roll), not per refill tile
+  BLOCKER_WATER_SEEDS_MIN: 2,        // puddles per segment seeding event
+  BLOCKER_WATER_SEEDS_MAX: 3,
+  BLOCKER_COLOR_SAFE_CHANCE: 0.05,   // per refill tile
+  BLOCKER_BOX_BOMBS_MIN: 2,          // bombs from a cracked box (1 in place + rest scattered)
+  BLOCKER_BOX_BOMBS_MAX: 3,
+  BLOCKER_SCATTER_DIST: 2,           // min Chebyshev distance between same-type blockers on spawn
   // v15 merge remap: the original gates (3/5/7) were tuned for the endless
   // pre-v10 game — runs now END at the final flag (3 flags on world-1
   // regular runs, 6 on bosses/worlds 2-3), which made water barely reachable
@@ -43,7 +48,7 @@ const CONFIG = {
   BLOCKER_STATIC_BOX_HITS: 3,
   BLOCKER_WATER_SPREAD_INTERVAL: 1,  // water spreads every Nth player move
   BLOCKER_COLOR_SAFE_COLORS_REQUIRED: 4, // of 5 (all of them when fewer colours are active)
-  BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
+  BLOCKER_CAPS: { box: 3, water: 6, safe: 1 }, // concurrent per type (water counts seeds+spread — a new seeding skips while the board is still wet)
   BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
 
   // Chomper food: cell-layer snacks only Chomper can consume, paying
@@ -272,18 +277,21 @@ Object.defineProperty(CONFIG, 'COUNTDOWN_TIMER_START', {
    and immovableTile (can't be swapped). They ride gravity like chests. */
 const BLOCKERS = {
   box: {
+    mode:   'drip', // per-move roll, placed on a scattered board cell (v16)
     intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_BOX,
     chance: () => CONFIG.BLOCKER_STATIC_BOX_CHANCE,
     cap:    () => CONFIG.BLOCKER_CAPS.box,
     make:   () => ({ hits: CONFIG.BLOCKER_STATIC_BOX_HITS }),
   },
   water: {
+    mode:   'segment', // one seeding event per checkpoint segment, 2-3 puddles (v16)
     intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_WATER,
-    chance: () => CONFIG.BLOCKER_WATER_CHANCE,
+    seedRange: () => [CONFIG.BLOCKER_WATER_SEEDS_MIN, CONFIG.BLOCKER_WATER_SEEDS_MAX],
     cap:    () => CONFIG.BLOCKER_CAPS.water,
     make:   () => ({}),
   },
   safe: {
+    mode:   'refill',
     intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_SAFE,
     chance: () => CONFIG.BLOCKER_COLOR_SAFE_CHANCE,
     cap:    () => CONFIG.BLOCKER_CAPS.safe,
@@ -904,6 +912,7 @@ class PersistentGame extends Game {
     // One move can cross several checkpoints at once — settle every owed draft.
     this.run.pendingDrafts = Math.max(0, this.run.pendingDrafts - 1);
     if (this.run.pendingDrafts > 0) { this.startDraft(); return; }
+    this.seedSegmentBlockers(); // v16: water's once-per-segment flood lands with the new segment
     this.phase = 'level';
     this.busy = true;
     this.render();
@@ -924,6 +933,7 @@ class PersistentGame extends Game {
     const startMoves = CONFIG.WORLD_START_MOVES[Math.min(META.state.world, CONFIG.WORLD_START_MOVES.length) - 1];
     this.movesLeft = Math.max(1, startMoves + this.runModStartMoves());
     this.segPeak = this.movesLeft; this.segClipped = 0; this.segDanger = 0; this.segFood = 0; this.segBlockers = { box: 0, water: 0, safe: 0 };
+    this.segBlockerSeeded = {}; // segment-mode blockers: type -> checkpointIdx last seeded (v16)
     this.lastWarnedMoves = null;
     this.score = 0;
     this.segStartScore = 0;  // telemetry: score at the current segment's start
@@ -1090,6 +1100,7 @@ class PersistentGame extends Game {
       // spread AFTER the move and its cascades fully resolve
       if (this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
       this.dripRolls();
+      this.dripBlockers(); // v16: boxes land scattered on the board, not in the refill lane
       this.topUpFood(); // the table never runs low (no-op without Chomper)
       if (this.movesLeft <= 3) this.segDanger++; // moves played under the gun (cap-tuning telemetry)
     }
@@ -1234,6 +1245,7 @@ class PersistentGame extends Game {
 
   rollBlockerTile() {
     for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (def.mode !== 'refill') continue; // drip/segment types place directly on the board (v16)
       if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
       if (this.blockerCount(type) >= def.cap()) continue;
       if (this.rng() < def.chance())
@@ -1241,6 +1253,68 @@ class PersistentGame extends Game {
                  special: null, dir: null, countdown: null, fresh: true };
     }
     return null;
+  }
+
+  // A random cell suitable for a blocker to land on: a plain coloured tile
+  // (no specials, chests, critters, other blockers), no cell marks, not the
+  // top row (refill lane), and at least BLOCKER_SCATTER_DIST away from every
+  // same-type blocker — relaxes to adjacent-only if the board is too full.
+  blockerScatterSpot(type) {
+    const others = [];
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
+      if (this.board[r][c] && this.board[r][c].blocker === type) others.push({ r, c });
+    for (const minDist of [CONFIG.BLOCKER_SCATTER_DIST, 1]) {
+      let guard = 0;
+      while (guard++ < 150) {
+        const r = 1 + Math.floor(this.rng() * (this.rows - 1)); // never the top row
+        const c = Math.floor(this.rng() * this.cols);
+        const k = K(r, c);
+        if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) continue;
+        const t = this.board[r][c];
+        if (!t || t.special || this.protectedTile(t)) continue;
+        if (others.some(o => Math.max(Math.abs(o.r - r), Math.abs(o.c - c)) < minDist)) continue;
+        return { r, c };
+      }
+    }
+    return null;
+  }
+
+  placeBlocker(type) {
+    const spot = this.blockerScatterSpot(type);
+    if (!spot) return false;
+    const def = BLOCKERS[type];
+    this.board[spot.r][spot.c] = { id: this.tileId++, color: -4, blocker: type, ...def.make(),
+                                   special: null, dir: null, countdown: null, fresh: true };
+    this.addFx(spot.r, spot.c, type === 'box' ? '📦' : type === 'water' ? '💧' : '🔒', 'emoji');
+    return true;
+  }
+
+  // Drip-mode blockers (box): one roll per player move, placed scattered.
+  dripBlockers() {
+    for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (def.mode !== 'drip') continue;
+      if (this.run.checkpointIdx < def.intro()) continue;
+      if (this.blockerCount(type) >= def.cap()) continue;
+      if (this.rng() < def.chance()) this.placeBlocker(type);
+    }
+  }
+
+  // Segment-mode blockers (water): ONE seeding event per checkpoint segment —
+  // 2-3 puddles scattered across the board. Skipped while the previous
+  // flood is still on the board (cap counts seeds + spread).
+  seedSegmentBlockers() {
+    for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (def.mode !== 'segment') continue;
+      if (this.run.checkpointIdx < def.intro()) continue;
+      if (this.segBlockerSeeded[type] === this.run.checkpointIdx) continue; // once per segment
+      this.segBlockerSeeded[type] = this.run.checkpointIdx;
+      if (this.blockerCount(type) >= def.cap()) continue;
+      const [lo, hi] = def.seedRange();
+      const n = lo + Math.floor(this.rng() * (hi - lo + 1));
+      let placed = 0;
+      for (let i = 0; i < n; i++) if (this.placeBlocker(type)) placed++;
+      if (placed && type === 'water') this.callout('💧 Water is seeping in!');
+    }
   }
 
   // Match-time blocker effects, same timing as other match effects: the
@@ -1317,12 +1391,24 @@ class PersistentGame extends Game {
     t.hits--;
     this.addFx(r, c, t.hits > 0 ? '📦' : '💥', 'emoji');
     this.doShake(4);
-    if (t.hits <= 0) { // breaks open: a bomb sits where the box was
-      this.board[r][c] = { id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
-                           special: 'bomb', dir: null,
-                           countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true };
+    if (t.hits <= 0) { // breaks open: bombs spill out (v16 — one in place, 1-2 scatter)
+      const makeBomb = () => ({ id: this.tileId++, color: Math.floor(this.rng() * this.opts.colours),
+                                special: 'bomb', dir: null,
+                                countdown: this.mods.countdown ? CONFIG.COUNTDOWN_TIMER_START : null, fresh: true });
+      this.board[r][c] = makeBomb();
+      const total = CONFIG.BLOCKER_BOX_BOMBS_MIN
+                  + Math.floor(this.rng() * (CONFIG.BLOCKER_BOX_BOMBS_MAX - CONFIG.BLOCKER_BOX_BOMBS_MIN + 1));
+      let placed = 1, guard = 0;
+      while (placed < total && guard++ < 150) { // extras land on random plain tiles anywhere
+        const rr = Math.floor(this.rng() * this.rows), cc = Math.floor(this.rng() * this.cols);
+        const o = this.board[rr][cc];
+        if (!o || o.special || this.protectedTile(o)) continue;
+        this.board[rr][cc] = makeBomb();
+        this.addFx(rr, cc, '💣', 'emoji');
+        placed++;
+      }
       this.segBlockers.box++;
-      this.callout('📦 Box cracked — bomb inside!');
+      this.callout(`📦 Box cracked — ${placed} bombs inside!`);
     }
   }
 
