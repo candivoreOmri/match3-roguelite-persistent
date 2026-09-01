@@ -674,3 +674,11 @@ button.primary {
 .tester-row select { flex: 1; font: inherit; font-size: 12px; color: #e8eaf0; background: #1c202b; border: 1px solid #363c4e; border-radius: 8px; padding: 6px; min-width: 0; }
 .tester-row button { font-size: 12px; padding: 6px 10px; }
 .tester-hint { font-size: 10px; color: #7b8194; line-height: 1.4; }
+
+/* ---- v20: pre-run blocker toggles ---- */
+.blocker-toggles { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
+.blocker-toggles-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #7b8194; margin-right: 2px; }
+.blocker-toggle { font-size: 12px; padding: 6px 10px; opacity: .65; }
+.blocker-toggle.on { opacity: 1; border-color: #ffd54a; }
+.blocker-toggle.on b { color: #ffd54a; }
+.blocker-toggle b { color: #7b8194; }

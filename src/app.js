@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 19, // v19: interim checkpoint ease — new-art players pace ~9-11 ppm (was ~13); revert when the readability pass lands
+  BALANCE_VERSION: 20, // v20: per-blocker pre-run toggles, ALL OFF by default (records carry blockersOn)
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -424,6 +424,9 @@ class PersistentGame extends Game {
   constructor(onRender) {
     super(onRender);
     ACTIVE_GAME = this; // CONFIG getters + roster patches read live run state
+    // v20: per-blocker pre-run toggles — OFF by default (Omri). The intro
+    // checkpoints still gate spawn timing for any type switched on.
+    this.opts.blockers = { box: false, water: false, safe: false };
     this.marks = new Set();
     this.drip = { pinata: 0, chest: 0, triple: 0 }; // dry-move pity counters
     this.pendingChests = 0;      // chests queued to ride in on the next refill
@@ -760,6 +763,7 @@ class PersistentGame extends Game {
       snowBonus: this.run.snowBonus, // v8: snowball payout level at segment end
       foodEaten: this.segFood || 0,  // v9: chomper snacks eaten this segment
       blockers: { ...this.segBlockers }, // v10: boxes broken / water removed / safes opened
+      blockersOn: Object.keys(this.opts.blockers || {}).filter(k => this.opts.blockers[k]), // v20 toggles
       fast: !!this.fast, // bot/test runs — excluded from human summaries
     });
     this.segStartScore = this.score;
@@ -829,6 +833,7 @@ class PersistentGame extends Game {
 
   rollBlockerTile() {
     for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (!this.opts.blockers || !this.opts.blockers[type]) continue; // pre-run toggle (default off)
       if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
       if (this.blockerCount(type) >= def.cap()) continue;
       if (this.rng() < def.chance())
@@ -1211,6 +1216,7 @@ function MenuScreen({ G }) {
       : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
     <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
     <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
+    <${BlockerToggles} G=${G} />
     <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
     ${dev ? h`<div className="dev-drawer">
       <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
@@ -1221,6 +1227,20 @@ function MenuScreen({ G }) {
     <div className="end-art menu-art">${SKIN.has('menu.art')
       ? h`<img className="skin-img" src=${SKIN.url('menu.art')} alt="" />`
       : h`<span className="end-art-label">menu.art</span>`}</div>
+  </div>`;
+}
+
+// v20: pre-run per-blocker toggles (visible on the menu, not the 🧪 panel).
+function BlockerToggles({ G }) {
+  const [, bump] = React.useReducer(x => x + 1, 0);
+  const B = [['box', '📦', 'Boxes'], ['water', '💧', 'Water'], ['safe', '🔒', 'Safes']];
+  return h`<div className="blocker-toggles">
+    <span className="blocker-toggles-label">Blockers</span>
+    ${B.map(([k, icon, name]) => h`<button key=${k}
+      className=${'toggle blocker-toggle' + (G.opts.blockers[k] ? ' on' : '')}
+      onClick=${() => { G.opts.blockers[k] = !G.opts.blockers[k]; bump(); G.render(); }}>
+      ${icon} ${name} <b>${G.opts.blockers[k] ? 'ON' : 'off'}</b>
+    </button>`)}
   </div>`;
 }
 
