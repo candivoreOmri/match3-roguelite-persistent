@@ -1439,12 +1439,9 @@ function Board({ G }) {
   for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
     const cellKey = K(r, c);
     const cellSlot = ((r + c) % 2) ? 'board.cell-alt' : 'board.cell';
-    // cell backs sit ~10% LOW: the stacked piece art overhangs downward, so
-    // the back aligns with the piece's body, not its upper face (CD)
-    const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
       className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '') + (G.foodCells.has(cellKey) ? ' foodc' : '')}
-      style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
+      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
     const t = G.board[r][c];
@@ -1534,10 +1531,8 @@ function Board({ G }) {
       style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.4) * cell + 'px' }}>${f.text}</div>`);
   }
 
-  // board height includes the last row's lip overhang (17% of a cell), so the
-  // frame's top and bottom gaps around the visible tiles come out equal (CD)
   return h`<div className=${'board' + (G.shake ? ' shake' : '')}
-    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + Math.round(cell * 0.17) + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
+    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
     onPointerDown=${onDown} onPointerMove=${onMove} onPointerUp=${onUp} onPointerLeave=${onUp}>
     ${bg}${tiles}${cellmarks}${fx}
   </div>`;
