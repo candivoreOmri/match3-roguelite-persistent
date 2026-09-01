@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 18, // v18: blockers (box/water/safe) + square ×2 + chomper-first timing (on v17 food + v16 ease)
+  BALANCE_VERSION: 19, // v19: interim checkpoint ease — new-art players pace ~9-11 ppm (was ~13); revert when the readability pass lands
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -68,7 +68,12 @@ const CONFIG = {
   // segments 2-3 a wall (45/46% clear, median 4 moves/segment played at ≤3
   // left). Omri chose to ease CHECKPOINTS only, grants untouched: seg2 delta
   // 170→150, seg3 270→220, all later segment DELTAS preserved exactly.
-  CHECKPOINTS: [80, 230, 450, 830, 1430, 2430],
+  // v19 INTERIM ease: the UXI art transition cut skilled players' pace
+  // (same-player, same-build: 27 → 11.4 ppm) — specials/colour scanning
+  // suffer in the new art. Calibrated to observed new-art pace (~9-11 ppm);
+  // seg deltas 70/130/220 up front, later deltas unchanged. Revert to
+  // [80, 230, 450, 830, 1430, 2430] once the art readability pass lands.
+  CHECKPOINTS: [70, 200, 420, 790, 1390, 2390],
   START_MOVES: 10,                 // opening move pool
   // v6: grants cut again (Omri: checkpoint move rewards still too generous) —
   // each segment's grant now sits ~2 under its observed median moves-used,
