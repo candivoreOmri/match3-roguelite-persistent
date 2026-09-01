@@ -276,6 +276,14 @@ def main():
                           lambda: emoji_tile('tile.chest', '🎁', bg=((217, 165, 86), (138, 90, 29))))
     jobs['tile.chomper'] = ('tiles/chomper.png',
                             lambda: emoji_tile('tile.chomper', '😬', bg=((110, 231, 222), (15, 118, 110))))
+    # v10 blockers (Omri's registry renders tile.blocker.<type> with fallbacks)
+    jobs['tile.blocker.box'] = ('tiles/blocker-box.png',
+                                lambda: emoji_tile('tile.blocker.box', '📦', bg=((154, 123, 79), (93, 69, 39))))
+    jobs['tile.blocker.water'] = ('tiles/blocker-water.png',
+                                  lambda: emoji_tile('tile.blocker.water', '💧', bg=((80, 150, 235), (23, 74, 160))))
+    jobs['tile.blocker.safe'] = ('tiles/blocker-safe.png',
+                                 lambda: emoji_tile('tile.blocker.safe', '🔒', bg=((107, 114, 128), (55, 65, 81))))
+    jobs['marker.food'] = ('markers/food.png', lambda: marker('marker.food', ch='🍖'))
     jobs['bg.main'] = ('app/bg-main.png', lambda: bg_main('bg.main'))
     jobs['logo'] = ('app/logo.png', lambda: logo('logo'))
     jobs['end.art'] = ('app/end-art.png', lambda: end_art('end.art'))
