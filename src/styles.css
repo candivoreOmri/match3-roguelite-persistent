@@ -248,9 +248,10 @@ button.primary {
 .hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 36px; color: #fff; }
 .hud-moves-box .movecap { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-faint); }
 .hud-moves-box.low {
-  color: #fff; background: #a82a22; border-color: var(--danger);
-  animation: pulse 1s infinite;
+  color: #fff; background: #8e2a24; border-color: rgba(255, 90, 76, .6);
+  animation: lowBreathe 2.4s ease-in-out infinite; /* steady badge, soft breathe — no flash */
 }
+@keyframes lowBreathe { 50% { opacity: .82; } }
 .hud-moves-box.low .hmb-label, .hud-moves-box.low .movecap { color: #ffd9d5; }
 @keyframes pulse { 50% { opacity: .5; } }
 
@@ -688,3 +689,30 @@ button.primary {
 /* ---- v21: carry-over messaging ---- */
 .carryline b { color: #ffd54a; font-size: 16px; }
 .carrysub { font-size: 11px; color: #7b8194; margin-top: -6px; }
+
+/* ---- UI pass 2026-09-01: card cluster tints, parent chips, tier badges ---- */
+/* cluster tints: wash + border, subtle — colour=gold, chaos=ember, utility=teal */
+.card.cl-colour  { border-color: rgba(255, 205, 90, .45);  background: linear-gradient(160deg, rgba(255, 205, 90, .10), rgba(30, 26, 46, 0) 55%), linear-gradient(160deg, #2a2545, #201c38); }
+.card.cl-chaos   { border-color: rgba(255, 120, 80, .45);  background: linear-gradient(160deg, rgba(255, 120, 80, .10), rgba(30, 26, 46, 0) 55%), linear-gradient(160deg, #2a2545, #201c38); }
+.card.cl-utility { border-color: rgba(90, 200, 220, .45);  background: linear-gradient(160deg, rgba(90, 200, 220, .10), rgba(30, 26, 46, 0) 55%), linear-gradient(160deg, #2a2545, #201c38); }
+/* legendary: gold treatment on the whole card — should feel like an event */
+.card.legendary-card {
+  border-color: #ffd54a;
+  box-shadow: 0 0 14px rgba(255, 213, 74, .35), inset 0 0 22px rgba(255, 213, 74, .08);
+  animation: legendaryGlow 2.2s ease-in-out infinite;
+}
+@keyframes legendaryGlow { 50% { box-shadow: 0 0 22px rgba(255, 213, 74, .55), inset 0 0 26px rgba(255, 213, 74, .12); } }
+/* parent chip: "↑ evolves from" */
+.card-parent {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; color: #bdb6d8;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 99px; padding: 2px 8px; margin: 2px 0 3px; width: fit-content;
+}
+.card-parent-ic { display: inline-flex; width: 14px; height: 14px; align-items: center; justify-content: center; font-size: 11px; }
+.card-parent-ic .skin-img, .card-parent-ic img { width: 14px; height: 14px; object-fit: contain; }
+/* tier badge: T2 star dot (T1 stays clean) */
+.card-tier.t2 {
+  position: absolute; bottom: 8px; right: 12px;
+  font-size: 11px; color: #b9aef0; opacity: .8;
+}

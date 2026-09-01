@@ -1237,6 +1237,12 @@ function useCellSize(cols, rows) {
   return s;
 }
 
+// Parent of an upgrade pick, derived from its gate flag — data-driven, no
+// per-card hardcoding (UI pass, Omri 2026-09-01).
+function parentOf(def) {
+  return def.requiresBoost ? 'boost' : def.requiresSquare ? 'square' : def.requiresChomper ? 'chomper' : null;
+}
+
 function buildChips(G) {
   const chips = [], byKey = new Map();
   for (const p of G.run.picks) {
@@ -1245,7 +1251,15 @@ function buildChips(G) {
     if (byKey.has(k)) byKey.get(k).count++;
     else { const ch = { key: k, def, pick: p, count: 1 }; byKey.set(k, ch); chips.push(ch); }
   }
-  return chips;
+  // upgrades sit directly after their parent (stable otherwise)
+  const grouped = [];
+  for (const ch of chips) {
+    if (parentOf(ch.def)) continue;
+    grouped.push(ch);
+    for (const up of chips) if (parentOf(up.def) === ch.def.id) grouped.push(up);
+  }
+  for (const ch of chips) if (parentOf(ch.def) && !grouped.includes(ch)) grouped.push(ch); // orphans (cheat picks)
+  return grouped;
 }
 
 function Toggle({ G }) {
@@ -1360,13 +1374,16 @@ function ColorDot({ color }) {
 // + description to the right, cluster tag as a ribbon off the right edge.
 function DraftCard({ G, o, i }) {
   const def = POWERUPS[o.id];
-  return h`<button className="card" onClick=${() => G.pickOffer(i)}>
+  const parent = parentOf(def); // data-driven from the requires* gate
+  return h`<button className=${'card cl-' + def.cluster + (def.tier === 3 ? ' legendary-card' : '')} onClick=${() => G.pickOffer(i)}>
     <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
     <div className="card-main">
       <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      ${parent ? h`<div className="card-parent"><span className="card-parent-ic">${puIcon(parent)}</span> ↑ ${POWERUPS[parent].name}</div>` : null}
       <div className="card-desc">${def.desc(o)}</div>
     </div>
     <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
+    ${def.tier === 2 ? h`<div className="card-tier t2" title="Deeper unlock">★</div>` : null}
     ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
   </button>`;
 }
