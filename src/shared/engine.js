@@ -119,6 +119,11 @@ class Game {
   // Seam for variants: tiles the player can never swap. Base: chomper only.
   immovableTile(t) { return !!(t && t.chomper); }
 
+  // Seam for variants: a clear attempt (match extras, line clears, sweeps,
+  // explosions) landed on a protected tile. opts carries kind/src/depth.
+  // Base: nothing happens — protected tiles just don't clear.
+  onTileProtected(r, c, t, opts) {}
+
   // Seam for variants: called when a protected tile stops Chomper's step
   // (the blocker's cell + tile). Base: nothing happens — he just stays put.
   onChomperBlocked(r, c, t) {}
@@ -534,7 +539,8 @@ class Game {
     const addClear = (r, c, explosion, opts = {}) => {
       if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
       const t = this.board[r][c];
-      if (!t || this.protectedTile(t)) return false; // protected tiles are indestructible
+      if (!t) return false;
+      if (this.protectedTile(t)) { this.onTileProtected(r, c, t, opts); return false; } // indestructible — but the hit is reported
       const k = K(r, c);
       if (cleared.has(k)) return false;
       const delay = Math.min(500, opts.delay || 0);
@@ -1099,6 +1105,22 @@ class Game {
     return count(0, -1) + count(0, 1) >= 2 || count(-1, 0) + count(1, 0) >= 2;
   }
 
+  // Seam for variants: what merging two adjacent specials does. Base:
+  // arrow+arrow fuse into a cross; any other pair is the sum of its parts.
+  async resolveMerge(a, b, ta, tb) {
+    if (ta.special === 'arrow' && tb.special === 'arrow') {
+      // Two arrows fuse into a cross at the landing cell: full row + column.
+      // The cross REPLACES both arrow effects (even if both cleared the same
+      // direction), so the leftover arrow is stripped rather than chained.
+      tb.special = 'cross'; tb.dir = null;
+      ta.special = null; ta.dir = null; ta.countdown = null;
+      await this.explodeSeeds([b]);
+    } else {
+      // Any other pair: both pieces just activate — the sum of their parts.
+      await this.explodeSeeds([a, b]);
+    }
+  }
+
   swapTiles(a, b) {
     const t = this.board[a.r][a.c];
     this.board[a.r][a.c] = this.board[b.r][b.c];
@@ -1150,17 +1172,7 @@ class Game {
       this.addWave(b.r, b.c, 4, 0);
       this.doShake(10);
       this.emit('onMerge', a, b);
-      if (ta.special === 'arrow' && tb.special === 'arrow') {
-        // Two arrows fuse into a cross at the landing cell: full row + column.
-        // The cross REPLACES both arrow effects (even if both cleared the same
-        // direction), so the leftover arrow is stripped rather than chained.
-        tb.special = 'cross'; tb.dir = null;
-        ta.special = null; ta.dir = null; ta.countdown = null;
-        await this.explodeSeeds([b]);
-      } else {
-        // Any other pair: both pieces just activate — the sum of their parts.
-        await this.explodeSeeds([a, b]);
-      }
+      await this.resolveMerge(a, b, ta, tb);
     } else {
       await this.resolveBoard([a, b]);
     }

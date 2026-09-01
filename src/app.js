@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 20, // v20: per-blocker pre-run toggles, ALL OFF by default (records carry blockersOn)
+  BALANCE_VERSION: 21, // v21: merge combos (mega bomb/crosses/NOVA), line clears damage blockers, carry-over messaging
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -724,7 +724,10 @@ class PersistentGame extends Game {
       if (this.run.checkpointIdx >= cps.length) this.run.finalReached = true;
     }
     if (crossed) {
-      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted, final: this.run.finalReached };
+      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted,
+                              kept: this.movesLeft - granted, total: this.movesLeft, // carry-over made visible
+                              final: this.run.finalReached };
+      this.addFx(0.2, this.cols / 2 - 0.5, `👟 +${granted}`, 'gold big');
       this.phase = 'checkpoint';
       return;
     }
@@ -848,29 +851,39 @@ class PersistentGame extends Game {
   // count PLAYER matches only; water is removed by any match (cascades too),
   // and removing a water chain-removes the connected puddle.
   processStep(groups, swapCells, seeds, boardClears = []) {
+    this._blockerHitStep = new Set(); // one damage event per blocker per step
     const res = super.processStep(groups, swapCells, seeds, boardClears);
     if (groups.length) this.blockerMatchEffects(groups);
-    this.blockerExplosionEffects(res);
     return res;
   }
 
-  // Special-piece explosions AFFECT blockers (they still aren't cleared by
-  // them): a blast covering a box deals 1 hit, water in the blast is removed
-  // (chain rule applies), and a safe lights the exploding special's colour.
-  // Runs before applyStep, so exploding specials are still on the board.
-  blockerExplosionEffects(res) {
-    const hit = new Set(); // one effect per blocker per step
-    for (const { r, c, explosion } of res.cleared.values()) {
-      const t = this.board[r][c];
-      if (!t || !t.special) continue; // every cleared special explodes (invariant)
-      for (const cl of this.explosionCells(r, c, t)) {
-        const b = this.board[cl.r][cl.c];
-        if (!b || !b.blocker || hit.has(b.id)) continue;
-        hit.add(b.id);
-        if (b.blocker === 'water') this.removeWaterChain(cl.r, cl.c);
-        else if (b.blocker === 'box') this.damageBox(cl.r, cl.c, b);
-        else if (b.blocker === 'safe') this.lightSafe(cl.r, cl.c, b, t.color);
+  // v21: EVERY clear attempt that lands on a blocker damages it — explosions
+  // (as before) and now also row/column clears, sweeps, and purges (tester:
+  // 'row clear doesn't affect blockers'). Boxes take 1 hit, water is removed
+  // (chain rule), safes light the source special's colour when the hit came
+  // from an explosion ('e{r},{c}' src carries the exploding piece), otherwise
+  // one random unlit colour (same rule as Chomper bumps).
+  onTileProtected(r, c, t, opts) {
+    if (!t.blocker) return; // chests/chompers stay silently indestructible
+    if (!this._blockerHitStep) this._blockerHitStep = new Set();
+    if (this._blockerHitStep.has(t.id)) return;
+    this._blockerHitStep.add(t.id);
+    if (t.blocker === 'water') { this.removeWaterChain(r, c); return; }
+    if (t.blocker === 'box') { this.damageBox(r, c, t); return; }
+    if (t.blocker === 'safe') {
+      let color = -1;
+      if (opts && opts.src && opts.src[0] === 'e') { // explosion: use the source special's colour
+        const [sr, sc] = opts.src.slice(1).split(',').map(Number);
+        const src = this.board[sr] && this.board[sr][sc];
+        if (src && src.color >= 0) color = src.color;
       }
+      if (color < 0) { // colourless hit (line clear etc.): one random unlit slot
+        const unlit = [];
+        for (let i = 0; i < this.opts.colours; i++) if (!t.lit.includes(i)) unlit.push(i);
+        if (!unlit.length) return;
+        color = unlit[Math.floor(this.rng() * unlit.length)];
+      }
+      this.lightSafe(r, c, t, color);
     }
   }
 
@@ -916,6 +929,52 @@ class PersistentGame extends Game {
       for (let i = 0; i < this.opts.colours; i++) if (!t.lit.includes(i)) unlit.push(i);
       if (unlit.length) this.lightSafe(r, c, t, unlit[Math.floor(this.rng() * unlit.length)]);
     }
+  }
+
+  // v21 merge combos — merging specials should feel BIG (tester feedback):
+  //   ➡️+➡️  cross (full row + column)                       [base behaviour]
+  //   💣+💣  MEGA bomb (blast radius +2 for this explosion)
+  //   💣+➡️  the arrow upgrades to a cross, both fire
+  //   ⚡+➡️  colour clear + a cross
+  //   ⚡+💣  colour clear + a bigger bomb (radius +1)
+  //   ⚡+⚡  NOVA — the whole board clears (board effect: scores and chains
+  //          specials, fires no match hooks, marks stay — same rules as lava)
+  //   anything with 🧨 keeps the sum-of-parts default
+  async resolveMerge(a, b, ta, tb) {
+    const pair = [ta.special, tb.special].sort().join('+');
+    const boost = async (n, seeds) => {
+      this.mods.blastBonus += n; // transient — computeMods rebuilds on next pick
+      try { await this.explodeSeeds(seeds); } finally { this.mods.blastBonus -= n; }
+    };
+    if (pair === 'lightning+lightning') {
+      this.callout('🌩️ NOVA!');
+      this.doShake(14);
+      this.addWave(b.r, b.c, Math.max(this.rows, this.cols), 0);
+      const cells = [];
+      for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+        const t = this.board[r][c];
+        if (t && !this.protectedTile(t)) cells.push({ r, c });
+      }
+      const res = this.processStep([], null, [], cells);
+      if (res.cnt) {
+        this.render(); await this.sleep(CONFIG.POP_MS + res.maxDelay);
+        this.applyStep(res);
+        await this.dropAndFill();
+        this.applyFloods(res.floods);
+        await this.resolveBoard(null);
+      }
+      return;
+    }
+    if (pair === 'bomb+bomb') { this.callout('💥 MEGA BOMB!'); await boost(2, [b]); return; }
+    if (pair === 'bomb+lightning') { this.callout('⚡ Charged blast!'); await boost(1, [a, b]); return; }
+    if (pair === 'arrow+bomb' || pair === 'arrow+lightning') {
+      const arrow = ta.special === 'arrow' ? ta : tb;
+      arrow.special = 'cross'; arrow.dir = null;
+      this.callout(pair === 'arrow+bomb' ? '✚💣 Cross blast!' : '✚⚡ Storm cross!');
+      await this.explodeSeeds([a, b]);
+      return;
+    }
+    await super.resolveMerge(a, b, ta, tb); // arrow+arrow cross, dynamite pairs = sum of parts
   }
 
   damageBox(r, c, t) {
@@ -1525,7 +1584,9 @@ function LevelScreen({ G }) {
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel goal-panel">
         <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves${cp.final ? ' — final goal cleared! The endless chase begins 🔥' : ''}</p>
+        <p className="carryline"><b>${cp.kept}</b> moves kept + <b>${cp.moves}</b> bonus = <b>${cp.total}</b>/${CONFIG.MAX_MOVES} 👟</p>
+        <p className="carrysub">Leftover moves always carry over.</p>
+        ${cp.final ? h`<p>Final goal cleared — the endless chase begins 🔥</p>` : null}
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}

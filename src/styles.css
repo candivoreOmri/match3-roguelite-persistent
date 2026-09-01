@@ -682,3 +682,7 @@ button.primary {
 .blocker-toggle.on { opacity: 1; border-color: #ffd54a; }
 .blocker-toggle.on b { color: #ffd54a; }
 .blocker-toggle b { color: #7b8194; }
+
+/* ---- v21: carry-over messaging ---- */
+.carryline b { color: #ffd54a; font-size: 16px; }
+.carrysub { font-size: 11px; color: #7b8194; margin-top: -6px; }
