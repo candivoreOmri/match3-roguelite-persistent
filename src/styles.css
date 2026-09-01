@@ -316,15 +316,17 @@ button.primary {
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .06);
 }
 /* low-moves danger vignette: pulses faster as moves run out */
+/* mellowed 2026-09-01 (tester: too intense) — soft ember instead of alarm:
+   ~60% lower alphas, smaller spread, slower breathing, gentler ramp */
 .board-wrap.danger::after {
   content: ''; position: absolute; inset: -6px; border-radius: 16px;
   pointer-events: none; z-index: 15;
-  box-shadow: inset 0 0 24px rgba(255, 70, 60, .55), 0 0 18px rgba(255, 70, 60, .35);
-  animation: dangerPulse 1.6s ease-in-out infinite;
+  box-shadow: inset 0 0 14px rgba(255, 90, 70, .2), 0 0 10px rgba(255, 90, 70, .12);
+  animation: dangerPulse 2.6s ease-in-out infinite;
 }
-.board-wrap.d2::after { animation-duration: 1.1s; box-shadow: inset 0 0 30px rgba(255, 70, 60, .7), 0 0 22px rgba(255, 70, 60, .45); }
-.board-wrap.d1::after { animation-duration: .65s; box-shadow: inset 0 0 38px rgba(255, 60, 50, .85), 0 0 28px rgba(255, 60, 50, .6); }
-@keyframes dangerPulse { 50% { opacity: .25; } }
+.board-wrap.d2::after { animation-duration: 2s; box-shadow: inset 0 0 16px rgba(255, 90, 70, .26), 0 0 12px rgba(255, 90, 70, .16); }
+.board-wrap.d1::after { animation-duration: 1.4s; box-shadow: inset 0 0 20px rgba(255, 80, 60, .34), 0 0 14px rgba(255, 80, 60, .2); }
+@keyframes dangerPulse { 50% { opacity: .45; } }
 .board { position: relative; touch-action: none; border-radius: 12px; overflow: visible; }
 /* amplitude comes from --shake-amp (px), set inline by the engine */
 .board.shake { animation: shake .3s; }
