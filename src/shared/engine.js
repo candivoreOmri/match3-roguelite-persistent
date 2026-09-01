@@ -789,12 +789,23 @@ class Game {
       this.board[r][c] = tile;
       setTimeout(() => { delete tile.fresh; }, 400);
     }
-    for (const f of res.floods) {
+  }
+
+  // Flood / Converter conversions — applied AFTER gravity settles (they used
+  // to run pre-gravity inside applyStep, which let a conversion recolour a
+  // tile that was about to complete a cascade, silently denying it, and made
+  // the avoid-cascade preference judge a board that no longer existed).
+  // Tiles that are part of a SETTLED match are never conversion targets.
+  applyFloods(floods) {
+    if (!floods || !floods.length) return;
+    const matched = new Set();
+    for (const g of this.findGroups()) for (const cl of g.cells) matched.add(K(cl.r, cl.c));
+    for (const f of floods) {
       const cands = [], seen = new Set();
       if (f.cells) { // adjacent to the matched group (Flood)
         for (const cl of f.cells) for (const [dr, dc] of DIRS4) {
           const r = cl.r + dr, c = cl.c + dc, k = K(r, c);
-          if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
+          if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k) || matched.has(k)) continue;
           seen.add(k);
           const t = this.board[r][c];
           if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) cands.push({ r, c });
@@ -804,6 +815,7 @@ class Game {
         // should set up plays, not constantly fire free cascades
         const risky = [];
         for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+          if (matched.has(K(r, c))) continue; // never steal a tile from a pending cascade
           const t = this.board[r][c];
           if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) {
             (this.wouldMatchAt(r, c, f.color) ? risky : cands).push({ r, c });
@@ -916,6 +928,7 @@ class Game {
       this.render(); await this.sleep(CONFIG.POP_MS + res.maxDelay);
       this.applyStep(res);
       await this.dropAndFill();
+      this.applyFloods(res.floods); // conversions land on the SETTLED board
       await this.sleep(CONFIG.STEP_PAUSE);
     }
   }
