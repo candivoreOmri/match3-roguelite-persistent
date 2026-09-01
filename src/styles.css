@@ -866,6 +866,7 @@ button.primary.danger { background: linear-gradient(135deg, #ff5a4c, #b3261e); b
 .tt-world.active { border-color: var(--gold); color: var(--gold); opacity: 1; }
 .tt-world:disabled { opacity: .5; cursor: default; }
 .tt-world.active:disabled { opacity: 1; }
+.tt-reset { font-size: 12px; color: var(--danger); border-color: #5c2620; }
 .tester-tools { margin-top: 14px; text-align: center; }
 .tester-tools summary { color: #565c6e; font-size: 12px; cursor: pointer; list-style: none; }
 .tester-tools[open] summary { margin-bottom: 10px; }

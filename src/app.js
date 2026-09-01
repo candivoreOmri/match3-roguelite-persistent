@@ -1963,6 +1963,11 @@ function BoardScreen({ G }) {
               G.render();
             }}>${w.icon} ${w.id}</button>`)}
         </div>
+        <button className="tt-reset" onClick=${() => {
+          if (!confirm('Reset ALL board progress? Laps, dice, coins, items, world — everything starts fresh.')) return;
+          try { localStorage.removeItem(META_KEY); } catch (e) {}
+          location.reload();
+        }}>🗑️ Reset progress (fresh save)</button>
       </div>
       <${StatsPanel} />
     </details>
