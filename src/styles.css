@@ -118,12 +118,13 @@ body {
   display: flex; flex-direction: column; align-items: center;
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
 }
+/* Alegreya runs visually smaller than Fruktur did — display sizes bumped ~10% */
 h1 {
   font-family: var(--font-display); font-weight: 400;
-  font-size: 34px; margin: 18px 0 6px; text-align: center;
+  font-size: 38px; margin: 18px 0 6px; text-align: center;
 }
 h2 {
-  font-family: var(--font-display); font-weight: 400; font-size: 24px;
+  font-family: var(--font-display); font-weight: 400; font-size: 27px;
 }
 .sub { color: var(--text-dim); font-size: 15px; margin-bottom: 14px; text-align: center; }
 .hint { color: var(--text-faint); font-size: 13px; margin-top: 22px; text-align: center; line-height: 1.5; max-width: 360px; }
@@ -148,7 +149,7 @@ button {
 }
 button:active { transform: scale(0.97); }
 button.primary {
-  font-family: var(--font-display); font-weight: 400; font-size: 20px;
+  font-family: var(--font-display); font-weight: 400; font-size: 22px;
   background: var(--cta); border: none; color: #fff;
   padding: 13px 24px; box-shadow: var(--cta-shadow);
 }
@@ -158,7 +159,7 @@ button.primary {
 /* ------- menu (player-facing: logo + CTA; dev controls in the drawer) ------- */
 .menu { justify-content: center; padding-bottom: 264px; } /* centered above the bottom art panel */
 .menu-logo { width: 84%; max-width: 360px; }
-.menu-start { margin-top: 14px; min-width: 250px; font-size: 26px; padding: 16px 40px; }
+.menu-start { margin-top: 14px; min-width: 250px; font-size: 29px; padding: 16px 40px; }
 .devtoggle {
   margin-top: 30px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
   text-transform: uppercase; color: var(--text-faint);
@@ -194,7 +195,7 @@ button.primary {
   font-size: 11px; font-weight: 800; text-transform: uppercase;
   letter-spacing: .09em; color: var(--text-dim);
 }
-.card-name { font-family: var(--font-display); font-weight: 400; font-size: 21px; color: #fff; line-height: 1.15; }
+.card-name { font-family: var(--font-display); font-weight: 400; font-size: 23px; color: #fff; line-height: 1.15; }
 .card-desc { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
 /* cluster tag as a ribbon off the card's right edge */
 .card-tag {
@@ -251,7 +252,7 @@ button.primary {
   padding: 5px 16px; line-height: 1.05; min-width: 96px; gap: 1px;
 }
 .hmb-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); }
-.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 36px; color: #fff; }
+.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 39px; color: #fff; }
 .hud-moves-box .movecap { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-faint); }
 .hud-moves-box.low {
   color: #fff; background: #8e2a24; border-color: rgba(255, 90, 76, .6);
@@ -590,7 +591,9 @@ button.primary {
   box-shadow: 0 0 34px rgba(255, 213, 74, .28), 0 6px 24px rgba(0, 0, 0, .4);
 }
 
-.end { justify-content: flex-start; padding-top: 56px; }
+/* end screen centered; padding tuned so the Play again CTA sits just BELOW
+   the screen's vertical center, with the art panel underneath (CD) */
+.end { justify-content: center; padding-bottom: 160px; }
 .end-sub {
   font-size: 13px; font-weight: 800; color: var(--text-dim);
   text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px;
@@ -626,7 +629,7 @@ button.primary {
 }
 .draft-title {
   font-family: var(--font-display); font-weight: 400;
-  text-align: center; font-size: 28px; color: #fff; margin-top: -6px;
+  text-align: center; font-size: 31px; color: #fff; margin-top: -6px;
 }
 .movecap { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .fill-fill.sfill { background: linear-gradient(90deg, #58a6ff, #bfe3ff); }
