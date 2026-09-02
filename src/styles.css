@@ -149,7 +149,7 @@ button {
 }
 button:active { transform: scale(0.97); }
 button.primary {
-  font-family: var(--font-display); font-weight: 400; font-size: 22px;
+  font-family: var(--font-display); font-weight: 400; font-size: 44px; /* CD: x2 */
   background: var(--cta); border: none; color: #fff;
   padding: 13px 24px; box-shadow: var(--cta-shadow);
 }
@@ -160,7 +160,7 @@ button.primary {
 /* centered like the end screen: CTA lands just below the vertical center */
 .menu { justify-content: center; padding-bottom: 160px; }
 .menu-logo { width: 84%; max-width: 360px; }
-.menu-start { margin-top: 26px; min-width: 250px; font-size: 29px; padding: 16px 40px; }
+.menu-start { margin-top: 26px; min-width: 250px; font-size: 58px; padding: 12px 44px; } /* CD: x2 */
 .devtoggle {
   margin-top: 30px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
   text-transform: uppercase; color: var(--text-faint);
