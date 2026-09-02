@@ -1694,7 +1694,7 @@ function LevelScreen({ G }) {
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel goal-panel">
-        <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
+        <h2>Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
         <p className="carryline"><b>${cp.kept}</b> moves kept + <b>${cp.moves}</b> bonus = <b>${cp.total}</b>/${CONFIG.MAX_MOVES} 👟</p>
         <p className="carrysub">Leftover moves always carry over.</p>
         ${cp.final ? h`<p>Final goal cleared — the endless chase begins 🔥</p>` : null}

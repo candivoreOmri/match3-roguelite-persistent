@@ -591,6 +591,8 @@ button.primary {
   border-color: var(--gold);
   box-shadow: 0 0 34px rgba(255, 213, 74, .28), 0 6px 24px rgba(0, 0, 0, .4);
 }
+/* the draft CTA runs ~40% smaller than the full-size primaries (CD) */
+.goal-panel button.primary { font-size: 26px; padding: 10px 20px; }
 
 /* end screen centered; padding tuned so the Play again CTA sits just BELOW
    the screen's vertical center, with the art panel underneath (CD) */
