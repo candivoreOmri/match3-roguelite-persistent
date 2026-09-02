@@ -31,7 +31,7 @@ trap 'rm -rf "$TMP"' EXIT
   # in styles.css can't resolve — append data-URI @font-face rules that win the
   # cascade (same family+weight declared later overrides the dev rule).
   echo '<style>'
-  for spec in "Fruktur:Fruktur-Regular.ttf" "Alegreya Sans:AlegreyaSans-ExtraBold.ttf"; do
+  for spec in "Alegreya:Alegreya-ExtraBold.ttf" "Alegreya Sans:AlegreyaSans-ExtraBold.ttf"; do
     fam="${spec%%:*}"; file="${spec#*:}"
     printf "@font-face{font-family:'%s';src:url(data:font/ttf;base64," "$fam"
     openssl base64 -A -in "$SRC/fonts/$file"
