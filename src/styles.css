@@ -157,9 +157,10 @@ button.primary {
 .toggle b { color: var(--gold); }
 
 /* ------- menu (player-facing: logo + CTA; dev controls in the drawer) ------- */
-.menu { justify-content: center; padding-bottom: 264px; } /* centered above the bottom art panel */
+/* centered like the end screen: CTA lands just below the vertical center */
+.menu { justify-content: center; padding-bottom: 160px; }
 .menu-logo { width: 84%; max-width: 360px; }
-.menu-start { margin-top: 14px; min-width: 250px; font-size: 29px; padding: 16px 40px; }
+.menu-start { margin-top: 26px; min-width: 250px; font-size: 29px; padding: 16px 40px; }
 .devtoggle {
   margin-top: 30px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
   text-transform: uppercase; color: var(--text-faint);

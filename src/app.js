@@ -1334,9 +1334,8 @@ function MenuScreen({ G }) {
   const [dev, setDev] = React.useState(false);
   return h`<div className="screen menu">
     ${SKIN.has('logo')
-      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
-      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
-    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
+      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Mage Match" />`
+      : h`<h1>🏔️ Mage Match</h1>`}
     <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
     <${BlockerToggles} G=${G} />
     <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
