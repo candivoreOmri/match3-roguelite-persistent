@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ascent — living style guide</title>
 <style>
-  @font-face { font-family: 'Fruktur'; src: url(../fonts/Fruktur-Regular.ttf) format('truetype'); font-weight: 100 900; }
+  @font-face { font-family: 'Alegreya'; src: url(../fonts/Alegreya-ExtraBold.ttf) format('truetype'); font-weight: 100 900; }
   @font-face { font-family: 'Alegreya Sans'; src: url(../fonts/AlegreyaSans-ExtraBold.ttf) format('truetype'); font-weight: 100 900; }
   :root {
     --bg: #171130; --surface: #221a44; --raised: #2b2156; --border: #40336e;
@@ -15,10 +15,10 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Alegreya Sans', sans-serif; padding: 24px; }
-  h1 { font-family: 'Fruktur', cursive; font-size: 34px; margin-bottom: 4px;
+  h1 { font-family: 'Alegreya', serif; font-size: 34px; margin-bottom: 4px;
        text-shadow: 0 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
   .note { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
-  h2 { font-family: 'Fruktur', cursive; font-size: 22px; margin: 28px 0 12px; color: var(--gold); }
+  h2 { font-family: 'Alegreya', serif; font-size: 22px; margin: 28px 0 12px; color: var(--gold); }
   .grid { display: flex; flex-wrap: wrap; gap: 10px; }
   .card { width: 132px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; }
   .well { height: 96px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
@@ -34,10 +34,10 @@
             text-shadow: 0 1px 2px rgba(0,0,0,.8); border: 1px solid rgba(255,255,255,.12); }
   .type-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
   .type-card .label { font-size: 11px; color: var(--text-faint); font-family: monospace; margin-bottom: 4px; }
-  .disp { font-family: 'Fruktur', cursive; font-size: 30px;
+  .disp { font-family: 'Alegreya', serif; font-size: 30px;
           text-shadow: 0 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
   .body-lg { font-size: 17px; } .body-sm { font-size: 13px; color: var(--text-dim); }
-  button.cta { font-family: 'Fruktur', cursive; font-size: 18px; color: #fff; border: none; border-radius: 14px;
+  button.cta { font-family: 'Alegreya', serif; font-size: 18px; color: #fff; border: none; border-radius: 14px;
                padding: 12px 26px; background: var(--cta); box-shadow: 0 4px 18px rgba(165, 107, 255, .4); cursor: pointer; }
 </style>
 </head>
@@ -46,7 +46,7 @@
 <p class="note">Living review surface. Slots read live from <code>skin.json</code> — red = missing (emoji/CSS fallback active in game). Refresh after dropping art + updating the manifest.</p>
 
 <h2>Type</h2>
-<div class="type-card"><div class="label">display — Fruktur (titles, CTAs, callouts)</div>
+<div class="type-card"><div class="label">display — Alegreya ExtraBold (titles, CTAs, callouts)</div>
   <div class="disp">Checkpoint 3 — Draft a Power-Up!</div></div>
 <div class="type-card"><div class="label">body — Alegreya Sans ExtraBold (running text, numbers)</div>
   <div class="body-lg">One board, one bar. Cross 6 checkpoints — 1234567890</div>
@@ -68,7 +68,8 @@ const TAXONOMY = {
   ],
   'P1 — identity': [ ['bg.main','🌌'],['logo','🏔️'],['icon.moves','👟'],['icon.flag','🚩'],['end.art','🖼️'],['menu.art','🖼️'] ],
   'P2 — board & meters': [
-    ['marker.xtramove','🔄'],['marker.pinata','🪅'],['marker.triple','✖️'],
+    ['marker.xtramove','🔄'],['marker.pinata','🪅'],['marker.triple','✖️'],['marker.food','🍖'],
+    ['tile.blocker.box','📦'],['tile.blocker.water','💧'],['tile.blocker.safe','🔒'],
     ['icon.momentum','🚀'],['icon.fillup','🔋'],['icon.snowball','❄️'],
     ['board.cell','▫️'],['board.cell-alt','◽'],['board.frame','🖼️'],
   ],

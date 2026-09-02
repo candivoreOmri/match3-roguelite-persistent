@@ -63,6 +63,10 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `marker.xtramove` | 🔄 board mark |
 | `marker.pinata` | 🪅 board mark |
 | `marker.triple` | ×3 board mark |
+| `marker.food` | 🍖 chomper snack (cell overlay) |
+| `tile.blocker.box` | 📦 box blocker (damage states still CSS/badge; single sprite for now) |
+| `tile.blocker.water` | 💧 water blocker |
+| `tile.blocker.safe` | 🔒 colour-safe blocker |
 | `icon.momentum` | 🚀 meter icon |
 | `icon.fillup` | 🔋 meter icon |
 | `icon.snowball` | ❄️ meter icon |
