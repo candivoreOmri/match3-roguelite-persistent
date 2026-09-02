@@ -1372,15 +1372,66 @@ function ColorDot({ color }) {
 
 // Shared draft card (CD, 2026-08-31): big icon on the LEFT, name (title font)
 // + description to the right, cluster tag as a ribbon off the right edge.
+/* CD copy pass (2026-09-01): ultra-short card titles — the pick's NAME shrinks
+   to a small kicker and this line is the big text. Tone: telegraphic, numbers
+   as +N. Full descriptions stay on the power-bar chip tooltips. A pick missing
+   here falls back to its long desc (visible = it needs a line adding). */
+const SHORT_DESC = {
+  boost: p => `${COLOR_NAMES[p.color]} tile +1`,
+  flood: () => 'Matches spread the colour',
+  spawner: () => 'Boosted matches spawn specials',
+  fillup: () => 'Boosted tiles charge a multiplier',
+  sweep: () => 'Vertical matches clear the colour',
+  converter: () => 'Matches paint one tile',
+  spawnweight: () => 'More boosted tiles drop',
+  purge: () => '4+ matches wipe the colour',
+  snowpaint: () => 'Boosted matches charge the snowball',
+  bombchance: () => `+${Math.round(CONFIG.BOMB_CHANCE_PER_PICK * 100)}% bomb spawns`,
+  countdown: () => 'Specials auto-explode',
+  blast: () => 'Bigger explosions',
+  specialscore: () => 'Specials +1',
+  rowclear: () => 'Horizontal match clears the row',
+  colclear: () => 'Vertical match clears the column',
+  matryoshka: () => 'Specials leave smaller specials',
+  aftershock: () => 'Explosions scorch nearby tiles',
+  fusionmove: () => `Merge specials, +${CONFIG.MERGE_BONUS_MOVES} move`,
+  lava: () => 'Bottom row melts each move',
+  snowcrush: () => 'Specials charge the snowball',
+  expandrow: () => 'Board +1 row',
+  expandcol: () => 'Board +1 column',
+  xtramove: () => 'Marked match refunds the move',
+  square: () => 'Square match',
+  squarebomb: () => 'Squares spawn bombs',
+  squarescore: () => `Squares +${CONFIG.SQUARE_BONUS_POINTS}`,
+  lifesaver: () => `Survive once, +${CONFIG.LIFESAVER_BONUS_MOVES} moves`,
+  momentum: () => 'Big matches charge a move',
+  chomper: () => 'A Chomper eats on the Board',
+  twinchomper: () => 'A second Chomper joins',
+  doublebite: () => 'Chomper eats twice',
+  gourmet: () => 'Chomper meals ×2',
+  spicytrail: () => "Chomper's trail burns",
+  bombtrail: () => 'Chomper leaves bombs',
+  buffet: () => 'More Chomper snacks',
+  conveyor: () => 'Board edges rotate',
+  diagswap: () => 'Swap diagonally',
+  pinata: () => `Crack piñatas, +${CONFIG.PINATA_POINTS}`,
+  tripletile: () => `Match the mark, move ×${CONFIG.TRIPLE_TILE_MULT}`,
+  chests: () => 'Chests pay points or moves',
+};
+POWERUPS.square.name = '2×2'; // player-facing rename (CD, 2026-09-01)
+
 function DraftCard({ G, o, i }) {
   const def = POWERUPS[o.id];
+  // merged: Omri's card identity (cluster tint, parent line, tier badges)
+  // under the CD copy layout (name kicker + short title)
+  const short = SHORT_DESC[o.id] ? SHORT_DESC[o.id](o) : def.desc(o);
   const parent = parentOf(def); // data-driven from the requires* gate
   return h`<button className=${'card cl-' + def.cluster + (def.tier === 3 ? ' legendary-card' : '')} onClick=${() => G.pickOffer(i)}>
     <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
     <div className="card-main">
-      <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-kicker">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-name">${short}</div>
       ${parent ? h`<div className="card-parent"><span className="card-parent-ic">${puIcon(parent)}</span> ↑ ${POWERUPS[parent].name}</div>` : null}
-      <div className="card-desc">${def.desc(o)}</div>
     </div>
     <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
     ${def.tier === 2 ? h`<div className="card-tier t2" title="Deeper unlock">★</div>` : null}

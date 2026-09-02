@@ -188,7 +188,12 @@ button.primary {
 .card:active { border-color: var(--accent); }
 .card-icon { font-size: 40px; flex: none; min-width: 54px; display: flex; align-items: center; justify-content: center; gap: 5px; }
 .card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-right: 52px; }
-.card-name { font-family: var(--font-display); font-weight: 400; font-size: 19px; color: #fff; }
+/* copy pass (CD, 2026-09-01): name shrinks to a kicker, short line is the title */
+.card-kicker {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--text-dim);
+}
+.card-name { font-family: var(--font-display); font-weight: 400; font-size: 21px; color: #fff; line-height: 1.15; }
 .card-desc { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
 /* cluster tag as a ribbon off the card's right edge */
 .card-tag {
