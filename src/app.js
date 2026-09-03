@@ -2114,7 +2114,7 @@ function BossOfferPanel({ world, onFight, onFlee }) {
 
 /* ----- The loop itself: iso zigzag of tile art + token; the tile layer pans
    to keep the token in view (translate the layer, never the tiles). */
-function BoardLoop({ pos, hopKey, moving, hopMs }) {
+function BoardLoop({ pos, hopKey, moving, hopMs, flt }) {
   const world = META.world();
   const ref = React.useRef(null);
   const [view, setView] = React.useState({ w: 406, h: 400 });
@@ -2135,7 +2135,8 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
     <div className="tile-layer" style=${{ width: stripW + 'px', height: stripH + 'px', transform: `translate(${-offX}px, ${-offY}px)` }}>
       ${world.spaces.map((type, i) => {
         const t = SPACE_TYPES[type], p = pts[i];
-        return h`<div key=${i} className=${'mtile ' + t.cls + (i === pos ? ' landed' : '')}
+        // the landed tile remounts per hop so its step animation replays (match-quest .mtile.step)
+        return h`<div key=${i === pos ? `${i}-${hopKey}` : i} className=${'mtile ' + t.cls + (i === pos ? ' landed step' : '')}
           style=${{ left: p.x + 'px', top: p.y + 'px', zIndex: Math.round(p.y) }} title=${t.label}>
           ${slotImg('mspace.' + type, 'tileimg') || h`<span className="tile-fb">${type === 'empty' ? world.icon : t.icon}</span>`}
         </div>`;
@@ -2144,6 +2145,7 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
         style=${{ left: pt.x + 'px', top: pt.y + 'px', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
         <div key=${hopKey} className="mtoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
       </div>
+      ${flt ? h`<div key=${flt.key} className=${'mfloat ' + (flt.cls || '')} style=${{ left: pt.x + 'px', top: (pt.y - 70) + 'px' }}>${flt.text}</div>` : null}
     </div>
   </div>`;
 }
@@ -2189,6 +2191,33 @@ function DummyBoard() {
   </div></div>`;
 }
 
+/* ----- Dice fly (M4, match-quest flyDice): earned dice fly from the frame
+   centre into the dice button as the hub comes back into view — capped at 8
+   sprites, 95ms stagger, each landing bumps the button and ticks the count. */
+function DiceFly({ G, n, onDone }) {
+  const [geo, setGeo] = React.useState(null);
+  React.useLayoutEffect(() => {
+    const phone = document.querySelector('.phone'), btn = document.querySelector('.dice-btn');
+    if (!phone || !btn) { onDone(); return; }
+    const p = phone.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    setGeo({ sx: p.width / 2, sy: p.height / 2, tx: b.left - p.left + b.width / 2, ty: b.top - p.top + b.height / 2 });
+  }, []);
+  const left = React.useRef(Math.min(n, 8));
+  const land = () => {
+    G.flyPending = Math.max(0, (G.flyPending || 0) - Math.ceil(n / Math.min(n, 8)));
+    const btn = document.querySelector('.dice-btn');
+    if (btn) { btn.classList.remove('dicehit'); void btn.offsetWidth; btn.classList.add('dicehit'); }
+    G.render();
+    if (--left.current <= 0) { G.flyPending = 0; G.render(); onDone(); }
+  };
+  if (!geo) return null;
+  return h`<div className="dice-fly">
+    ${Array.from({ length: Math.min(n, 8) }, (_, i) => h`<div key=${i} className="dice-sprite"
+      style=${{ '--sx': geo.sx + 'px', '--sy': geo.sy + 'px', '--tx': geo.tx + 'px', '--ty': geo.ty + 'px', animationDelay: (i * 95) + 'ms' }}
+      onAnimationEnd=${land}>${ic('icon.dice', '🎲', 'dice-sprite-img')}</div>`)}
+  </div>`;
+}
+
 /* ----- Board hub screen */
 function BoardScreen({ G }) {
   const S = META.state;
@@ -2197,6 +2226,8 @@ function BoardScreen({ G }) {
   const [face, setFace] = React.useState(CONFIG.DIE_SIDES);
   const [hopKey, setHopKey] = React.useState(0);
   const [notes, setNotes] = React.useState([]);
+  const [flt, setFlt] = React.useState(null); // reward float at the token (M4)
+  const fltKey = React.useRef(1);
   const [seed, setSeed] = React.useState('');
   const noteId = React.useRef(1);
   const timers = React.useRef([]);
@@ -2213,6 +2244,7 @@ function BoardScreen({ G }) {
     G.render();
   };
 
+  const floatAt = (text, cls = '') => { const key = fltKey.current++; setFlt({ key, text, cls }); later(() => setFlt(f => (f && f.key === key ? null : f)), 1100); };
   const note = (text, cls = '') => {
     const id = noteId.current++;
     setNotes(n => [...n, { id, text, cls }]);
@@ -2250,6 +2282,7 @@ function BoardScreen({ G }) {
       S.pos = (S.pos + 1) % CONFIG.BOARD_SPACES;
       if (S.pos === 0) {
         META.onLap();
+        floatAt(h`${ic('icon.lap', '🏁')} LAP!`, 'gold');
         note(`🏁 Lap ${S.laps} complete! +${CONFIG.LANDMARK_MOVE_BONUS} starting move next run`);
         if (!wasUnlocked && META.bossUnlocked()) later(() => note(`👹 ${world.boss.name} has appeared on the board!`, 'danger'), 900);
       }
@@ -2271,6 +2304,7 @@ function BoardScreen({ G }) {
       case 'coin': {
         const n = randInt(CONFIG.BOARD_COIN_REWARD_MIN, CONFIG.BOARD_COIN_REWARD_MAX);
         META.addCoins(n);
+        floatAt(h`+${n} ${ic('icon.coin', '🪙')}`, 'gold');
         setUi({ mode: 'reveal', type, coins: n });
         break;
       }
@@ -2278,12 +2312,14 @@ function BoardScreen({ G }) {
         const ids = Object.keys(CONSUMABLES);
         const item = ids[Math.floor(Math.random() * ids.length)];
         META.addConsumable(item);
+        floatAt(h`+1 ${ic('consumable.' + item, CONSUMABLES[item].icon)}`);
         setUi({ mode: 'reveal', type, item });
         break;
       }
       case 'modifier': {
         const id = world.modifierPool[Math.floor(Math.random() * world.modifierPool.length)];
         META.addModifier(id);
+        floatAt(h`${ic('runmod.' + id, RUN_MODIFIERS[id].icon)} ${RUN_MODIFIERS[id].name}`);
         setUi({ mode: 'reveal', type, mod: id });
         break;
       }
@@ -2291,6 +2327,7 @@ function BoardScreen({ G }) {
       case 'metaoffer': { // v11: net positive — applied on the spot, no accept/decline
         const offer = world.metaOffers[Math.floor(Math.random() * world.metaOffers.length)];
         META_POWERUPS[offer].apply();
+        floatAt(h`${ic('metaoffer.' + offer, META_POWERUPS[offer].icon)} +${CONFIG.JACKPOT_COINS} ${ic('icon.coin', '🪙')}`, 'gold');
         setUi({ mode: 'reveal', type, offer });
         break;
       }
@@ -2309,7 +2346,7 @@ function BoardScreen({ G }) {
   return h`<div className="screen board-screen">
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <div className="bboard">
-      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
+      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} flt=${flt} />
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
     </div>
     <div className="cta-stack">
@@ -2317,7 +2354,7 @@ function BoardScreen({ G }) {
         style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
         disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
         <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
-        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : S.dice}</b>
+        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : Math.max(0, S.dice - (G.flyPending || 0))}</b>
         <span className="dice-lbl">${ui.mode === 'rolling' ? '…' : 'ROLL'}</span>
         ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
       </button>
@@ -2956,6 +2993,17 @@ function App() {
     if (bw) z.style.setProperty('--peek-shift', Math.max(0, bw.getBoundingClientRect().top - z.getBoundingClientRect().top + (parseFloat(getComputedStyle(z).getPropertyValue('--peek-shift')) || 0) * (inRun ? 0 : 1)) + 'px');
   });
   const ended = G.phase === 'win' || G.phase === 'loss';
+  // dice fly: when a run ends and we return to the hub with dice earned
+  const [fly, setFly] = React.useState(null);
+  const prevPhase = React.useRef(G.phase);
+  React.useEffect(() => {
+    const was = prevPhase.current; prevPhase.current = G.phase;
+    if (G.phase === 'menu' && (was === 'win' || was === 'loss') && G.runReward && G.runReward.dice > 0) {
+      G.flyPending = G.runReward.dice; G.render();
+      const t = setTimeout(() => setFly({ n: G.runReward.dice, id: Date.now() }), 950); // after the pan lands
+      return () => clearTimeout(t);
+    }
+  }, [G.phase]);
   return h`<div className=${'phone' + (inRun ? ' cam-level' : '') + (arrived ? ' arrived' : '')}>
     ${SKIN.has('bg.main')
       ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
@@ -2969,6 +3017,7 @@ function App() {
       </div>
     </div></div>
     ${ended ? h`<div className="overlay end-overlay"><${EndScreen} G=${G} /></div>` : null}
+    ${fly ? h`<${DiceFly} key=${fly.id} G=${G} n=${fly.n} onDone=${() => setFly(null)} />` : null}
     <${TesterPanel} G=${G} />
   </div>`;
 }

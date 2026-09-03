@@ -117,7 +117,11 @@ syncing makes the later merge much harder. Options:
   red dice button (count + ROLL, ui.dice-button slot) above a wide Play run with a
   '3 goals' / 'BOSS RUN' pill, run-modifier chips + consumable slots beneath.
   Ring-centre cluster and lap/boss text retired. Loop viewport 360.
-- [ ] M4 — parallax polish + dice fly
+- [x] M4 (2026-09-02) — dice fly-in on Back to board (earned dice fly from the
+  frame centre into the dice button after the pan lands, ≤8 sprites, 95ms
+  stagger, button bumps and count ticks per landing); landing tile step
+  (sink/bump); reward floats rising from the token (coins, items, modifiers,
+  meta offers, LAP). Parallax hand-off itself landed in M1.
 - [ ] M5 — boss card + diegetic landings
 
 ## Ground rules (carry over)
