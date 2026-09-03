@@ -112,3 +112,5 @@ with data-URI values as `window.__SKIN_INLINE__` (skin.js already reads it).
 | `runmod.<id>` (cpmoves, first2x, startspecial, landmark, boss6, bosscold) | run-modifier chips + reveal popup | 256×256 |
 | `consumable.<id>` (hammer, bomb, shuffle) | wallet + reveal popup | 256×256 |
 | `metaoffer.jackpot` | 💰 | 256×256 |
+| `icon.shop` | 🛍️ top-bar shop button (buys a die) | 256×256 |
+| `ui.dice-button` | round red dice CTA face | 128×128, transparent corners; count + ROLL drawn by the UI |

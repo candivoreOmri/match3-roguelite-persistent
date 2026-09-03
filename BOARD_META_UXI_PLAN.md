@@ -112,7 +112,11 @@ syncing makes the later merge much harder. Options:
   merges the hub <details>, board speed toggle, fast badge and forced-offer panel,
   plus match-quest's cheat console (currency ±, auto-roll/progress board, auto
   win/lose run, run/hub status line, seed + new run, world skip, reset).
-- [ ] M3 — CTA stack (dice above Play run), top-bar world widget
+- [x] M3 (2026-09-02) — top bar = shop (buys a die) · world widget (name, lap→boss
+  progress track, boss marker) · coins pill; CTA stack under the loop = round
+  red dice button (count + ROLL, ui.dice-button slot) above a wide Play run with a
+  '3 goals' / 'BOSS RUN' pill, run-modifier chips + consumable slots beneath.
+  Ring-centre cluster and lap/boss text retired. Loop viewport 360.
 - [ ] M4 — parallax polish + dice fly
 - [ ] M5 — boss card + diegetic landings
 

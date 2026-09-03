@@ -2149,12 +2149,27 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
 }
 
 /* ----- Top bar — persistent across both camera states (M1): world · wallet */
-function TopBar() {
+function TopBar({ G }) {
   const S = META.state, world = META.world();
-  return h`<div className="topbar"><div className="bhead">
-    <div className="bworld">${ic(`world.${S.world}.icon`, world.icon)} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
-    <div className="bwallet"><span className="bcoins">${ic('icon.coin', '🪙')} ${S.coins}</span><${ConsumableRow} /></div>
-  </div></div>`;
+  const beaten = S.bossDefeated.includes(S.world), ready = META.bossUnlocked();
+  const pct = beaten || ready ? 100 : Math.round((S.worldLaps / world.lapsForBoss) * 100);
+  const buy = () => {
+    if (META.buyDie()) { G.hub && G.hub.note && G.hub.note('🎲 +1 die!'); G.render(); }
+    else G.hub && G.hub.note && G.hub.note(`Need ${CONFIG.DICE_PRICE_COINS} coins for a die`, 'danger');
+  };
+  return h`<div className="topbar">
+    <button className="tb-shop" onClick=${buy} title=${`Buy a die for ${CONFIG.DICE_PRICE_COINS} coins`}>${ic('icon.shop', '🛍️', 'tb-img')}</button>
+    <div className="ww">
+      <div className="ww-name">${ic(`world.${S.world}.icon`, world.icon)} <b>${world.name}</b></div>
+      <div className="ww-row">
+        <span className="ww-star">${ic('icon.lap', '🏁')}</span>
+        <div className="ww-track"><div className=${'ww-fill' + (ready ? ' ready' : '')} style=${{ width: pct + '%' }}></div></div>
+        <span className="ww-n">${beaten ? '✓' : `${S.worldLaps}/${world.lapsForBoss}`}</span>
+        <span className=${'ww-boss' + (ready ? ' ready' : '') + (beaten ? ' beaten' : '')} title=${world.boss.name}>${ic(`boss.${S.world}`, '👹')}</span>
+      </div>
+    </div>
+    <div className="tb-coins">${ic('icon.coin', '🪙')} <b>${S.coins}</b></div>
+  </div>`;
 }
 
 /* ----- Dummy board — what peeks under the hub before a run exists (M1).
@@ -2289,35 +2304,36 @@ function BoardScreen({ G }) {
   const close = () => { setUi({ mode: 'idle' }); G.render(); };
   const bossReady = META.bossUnlocked();
   // tester panel hooks (one 🧪 button drives everything — CD, 2026-09-02)
-  G.hub = { roll, cycleSpeed, speed, busy, startRun, setSeed, seed };
+  G.hub = { roll, cycleSpeed, speed, busy, startRun, setSeed, seed, note };
 
   return h`<div className="screen board-screen">
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
-    <${RunModChips} mods=${S.modifiers} label="Next run:" />
     <div className="bboard">
       <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
-      <div className="bhub">
-        <div className="bdice-count">${ic('icon.dice', '🎲')} <b>${S.dice}</b></div>
-        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '') + (SKIN.has('die') ? ' skinned' : '')}
-          style=${{ ...(ui.mode === 'rolling' ? { animationDuration: spd(280) + 'ms' } : null), ...(SKIN.has('die') ? { backgroundImage: `url(${SKIN.url('die')})` } : null) }}>${face}</div>
-        <button className="primary broll" disabled=${busy || S.dice <= 0} onClick=${roll}>
-          ${S.dice > 0 ? h`Roll ${ic('icon.dice', '🎲')}` : 'No dice'}
-        </button>
-        <button className="bbuy" disabled=${busy || S.coins < CONFIG.DICE_PRICE_COINS}
-          onClick=${() => { if (META.buyDie()) { note('🎲 +1 die!'); G.render(); } }}>
-          +1 ${ic('icon.dice', '🎲')} for ${CONFIG.DICE_PRICE_COINS} ${ic('icon.coin', '🪙')}
-        </button>
-        <div className="blaps">${ic('icon.lap', '🏁')} Lap ${S.laps}</div>
-        <div className=${'bboss-progress' + (bossReady ? ' ready' : '')}>
-          ${ic(`boss.${S.world}`, '👹')} ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'READY' : `${S.worldLaps}/${world.lapsForBoss} laps`}
-        </div>
-      </div>
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
     </div>
-    ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross checkpoint ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
-    ${bossReady
-      ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>⚔️ Fight ${world.boss.name}</button>`
-      : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>Play run</button>`}
+    <div className="cta-stack">
+      <button className=${'dice-btn' + (ui.mode === 'rolling' ? ' rolling' : '') + (SKIN.has('ui.dice-button') ? ' skinned' : '')}
+        style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
+        disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
+        <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
+        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : S.dice}</b>
+        <span className="dice-lbl">${ui.mode === 'rolling' ? '…' : 'ROLL'}</span>
+        ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
+      </button>
+      ${bossReady
+        ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>
+            <span>Fight ${world.boss.name}</span><span className="cta-pill boss">BOSS RUN</span></button>`
+        : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>
+            <span>Play run</span><span className="cta-pill">${CONFIG.WORLD_CHECKPOINTS[Math.min(S.world, CONFIG.WORLD_CHECKPOINTS.length) - 1].length} goals</span></button>`}
+      <${RunModChips} mods=${S.modifiers} label="Next run" />
+      <div className="cons-row">
+        ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} className=${'cons-slot' + (S.consumables[c.id] ? '' : ' none')} title=${c.name}>
+          ${ic('consumable.' + c.id, c.icon, 'cons-img')}<b className="amt">${S.consumables[c.id] || 0}</b>
+        </span>`)}
+      </div>
+      ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross goal ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
+    </div>
     ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} />` : null}
     ${ui.mode === 'bossoffer' ? h`<${BossOfferPanel} world=${world} onFight=${() => startRun(true)} onFlee=${close} />` : null}
   </div>`;
@@ -2944,7 +2960,7 @@ function App() {
     ${SKIN.has('bg.main')
       ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
       : h`<div className="bg-main bg-main-placeholder"></div>`}
-    <${TopBar} />
+    <${TopBar} G=${G} />
     <div className="viewport"><div className="surface">
       <div className="zone board-zone"><${BoardScreen} G=${G} /></div>
       <div className="zone seam"></div>

@@ -1093,3 +1093,53 @@ button.primary.danger { background: linear-gradient(135deg, var(--danger), #b326
 .bhub { position: static; transform: none; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 10px 14px; padding: 0 10px; }
 .bdie { width: 46px; height: 46px; font-size: 22px; }
 .bnotes { top: 4%; }
+
+/* ============================ M3: top bar + CTA stack ============================ */
+/* top bar: shop (L) · world widget (C) · coins pill (R) — icons + numbers, no labels */
+.topbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
+.tb-shop { width: 44px; height: 44px; padding: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+.tb-img { width: 26px; height: 26px; }
+.ww { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 5px 10px 6px; display: flex; flex-direction: column; gap: 3px; }
+.ww-name { font-family: var(--font-display); font-weight: 400; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px; }
+.ww-row { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.ww-star { font-size: 12px; line-height: 1; }
+.ww-track { flex: 1; height: 8px; border-radius: 99px; background: var(--sunken); overflow: hidden; }
+.ww-fill { height: 100%; border-radius: 99px; background: var(--bar-fill); transition: width .4s; }
+.ww-fill.ready { animation: pulse 1.4s infinite; }
+.ww-n { font-weight: 800; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ww-boss { font-size: 15px; line-height: 1; opacity: .55; }
+.ww-boss.ready { opacity: 1; animation: bossPulse 1.4s infinite; border-radius: 50%; }
+.ww-boss.beaten { opacity: 1; filter: grayscale(1); }
+.tb-coins { flex: none; display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 8px 12px; font-weight: 800; color: var(--gold); }
+.tb-coins .pu-img { width: 1.3em; height: 1.3em; }
+.bhead { display: none; } /* retired: TopBar owns the header now */
+
+/* CTA stack under the loop: round dice button above a wide Play run; run
+   modifiers + consumables ride beneath (match-quest frame 01) */
+.board-zone .screen { padding-top: 0; gap: 0; }
+.bboard .mboard { height: 360px; }
+.cta-stack { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: -6px; }
+.dice-btn {
+  position: relative; width: 88px; height: 88px; border-radius: 50%; padding: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1;
+  background: radial-gradient(circle at 40% 30%, #ff7a7a, #c8102e 70%); border: 3px solid #ffb3b3;
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,.3), 0 6px 18px rgba(200, 16, 46, .45); color: #fff;
+}
+.dice-btn.skinned { background: none; border: none; box-shadow: none; background-size: 100% 100%; }
+.dice-btn:disabled { filter: grayscale(.6) brightness(.7); cursor: default; }
+.dice-btn.rolling { animation: dieTumble .28s infinite; }
+.dice-ic { font-size: 18px; line-height: 1; } .dice-ic .dice-img { width: 22px; height: 22px; }
+.dice-n { font-family: var(--font-display); font-weight: 400; font-size: 30px; margin-top: -2px; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: var(--title-outline); }
+.dice-lbl { font-size: 10px; font-weight: 800; letter-spacing: .14em; margin-top: -1px; }
+.dice-badge { position: absolute; top: -6px; right: -12px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 800; color: var(--text); }
+.cta-stack .bstart { width: min(92%, 320px); font-size: 36px; padding: 10px 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cta-pill { font-family: var(--font-body); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; -webkit-text-stroke: 0; text-shadow: none;
+            background: rgba(0,0,0,.28); border-radius: 99px; padding: 3px 10px; }
+.cta-pill.boss { background: rgba(120, 20, 14, .7); }
+.cons-row { display: flex; gap: 10px; }
+.cons-slot { position: relative; width: 44px; height: 44px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.cons-slot .cons-img { width: 28px; height: 28px; }
+.cons-slot.none { opacity: .4; }
+.cons-slot .amt { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 99px; background: var(--gold); color: #3a2b00; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.cta-stack .runmods { margin-top: -2px; }
+.cta-stack .bhint-dice { margin: 0; font-size: 11px; }

@@ -210,6 +210,11 @@ def nine(slot, kind):
     elif kind == 'chip':
         img = rounded(vgrad(128, 128, (43, 33, 86), (34, 26, 68)), 56)
         ImageDraw.Draw(img).rounded_rectangle([1, 1, 126, 126], 56, outline=(64, 51, 110, 255), width=3)
+    elif kind == 'dicebtn':  # round red dice CTA face (transparent corners; count + ROLL drawn by the UI)
+        img = Image.new('RGBA', (128, 128), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.ellipse([2, 2, 125, 125], fill=(200, 16, 46, 255), outline=(255, 179, 179, 255), width=4)
+        d.ellipse([22, 14, 96, 70], fill=(255, 122, 122, 110))
     return img
 
 def pill(kind):
@@ -307,7 +312,8 @@ def main():
     for typ, ch in [('landmark', '🏠'), ('coin', '🪙'), ('consumable', '🧰'), ('modifier', '🔮'),
                     ('mystery', '❔'), ('minigame_flip', '🎰'), ('minigame_scratch', '🎫'),
                     ('metaoffer', '💼'), ('empty', '🌿'), ('boss', '👹')]:
-        jobs[f'mspace.{typ}'] = (f'hub/space-{typ}.png', lambda s=f'mspace.{typ}', e=ch: emoji_icon(s, e))
+        # canonical path = where the match-quest tile art was imported (CD art, skipped by the ledger)
+        jobs[f'mspace.{typ}'] = (f'hub/tiles/{typ}.png', lambda s=f'mspace.{typ}', e=ch: emoji_icon(s, e))
     jobs['token'] = ('hub/token.png', lambda: emoji_icon('token', '🧗'))
     jobs['die'] = ('hub/die.png', lambda: nine('die', 'die'))
     for slot, ch in [('icon.dice', '🎲'), ('icon.coin', '🪙'), ('icon.lap', '🏁')]:
@@ -321,6 +327,8 @@ def main():
     for cid, ch in [('hammer', '🔨'), ('bomb', '🧨'), ('shuffle', '🔀')]:
         jobs[f'consumable.{cid}'] = (f'hub/consumable-{cid}.png', lambda s=f'consumable.{cid}', e=ch: emoji_icon(s, e))
     jobs['metaoffer.jackpot'] = ('hub/metaoffer-jackpot.png', lambda: emoji_icon('metaoffer.jackpot', '💰'))
+    jobs['icon.shop'] = ('icons/shop.png', lambda: emoji_icon('icon.shop', '🛍️'))
+    jobs['ui.dice-button'] = ('ui/dice-button.png', lambda: nine('ui.dice-button', 'dicebtn'))
     for pid, ch in sorted(powerup_icons().items()):
         jobs[f'icon.powerup.{pid}'] = (f'powerups/{pid}.png',
                                        lambda s=f'icon.powerup.{pid}', e=ch: emoji_icon(s, e))
