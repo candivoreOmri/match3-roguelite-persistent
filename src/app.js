@@ -2047,7 +2047,7 @@ function MysteryBox({ reward, onDone, G }) {
     if (!applied.current) {
       applied.current = true;
       if (reward.kind === 'coins') { META.addCoins(reward.coins); if (G && G.fly) G.fly({ kind: 'coins', n: reward.coins, icon: ic('icon.coin', '🪙', 'dice-sprite-img'), target: '.tb-coins', delay: 500 }); }
-      else if (reward.kind === 'consumable') { META.addConsumable(reward.item); if (G && G.fly) G.fly({ kind: 'item:' + reward.item, n: 1, icon: ic('consumable.' + reward.item, CONSUMABLES[reward.item].icon, 'dice-sprite-img'), target: `.kit-slot[data-item="${reward.item}"]`, delay: 500 }); }
+      else if (reward.kind === 'consumable') { META.addConsumable(reward.item); if (G && G.fly) G.fly({ kind: 'item:' + reward.item, n: 1, icon: ic('consumable.' + reward.item, CONSUMABLES[reward.item].icon, 'dice-sprite-img'), target: '.backpack', delay: 500 }); }
       else { META.addDice(reward.dice); if (G && G.fly) G.fly({ kind: 'dice', n: reward.dice, icon: ic('icon.dice', '🎲', 'dice-sprite-img'), target: '.dice-btn', delay: 500 }); }
       setTimeout(onDone, 900); // reward flies out — the panel closes itself
     }
@@ -2247,6 +2247,7 @@ function BoardScreen({ G }) {
   const [notes, setNotes] = React.useState([]);
   const [flt, setFlt] = React.useState(null); // reward float at the token (M4)
   const [reveal, setReveal] = React.useState(null); // diegetic in-world reveal (M5)
+  const [bpOpen, setBpOpen] = React.useState(false); // backpack tooltip (CD)
   const revealKey = React.useRef(1);
   const fltKey = React.useRef(1);
   const [seed, setSeed] = React.useState('');
@@ -2342,7 +2343,7 @@ function BoardScreen({ G }) {
         const item = ids[Math.floor(Math.random() * ids.length)];
         META.addConsumable(item);
         floatAt(h`+1 ${ic('consumable.' + item, CONSUMABLES[item].icon)}`);
-        G.fly({ kind: 'item:' + item, n: 1, icon: ic('consumable.' + item, CONSUMABLES[item].icon, 'dice-sprite-img'), target: `.kit-slot[data-item="${item}"]` });
+        G.fly({ kind: 'item:' + item, n: 1, icon: ic('consumable.' + item, CONSUMABLES[item].icon, 'dice-sprite-img'), target: '.backpack' });
         setUi({ mode: 'idle' });
         break;
       }
@@ -2407,14 +2408,22 @@ function BoardScreen({ G }) {
                 ${ic('runmod.' + id, d.icon, 'cons-img')}${count > 1 ? h`<b className="amt">×${count}</b>` : null}</span>`; })}
           </div>` : null;
         })()}
+        ${(() => { // backpack: collapsible items, bottom-left of the Play button; flights land here
+          const total = Object.values(S.consumables).reduce((a, b) => a + (b || 0), 0);
+          return h`<div className="backpack-wrap">
+            <button className=${'backpack' + (bpOpen ? ' open' : '')} onClick=${() => setBpOpen(o => !o)} title="Items">
+              ${ic('icon.backpack', '🎒', 'bp-img')}${total ? h`<b className="amt">${total}</b>` : null}
+            </button>
+            ${bpOpen ? h`<div className="bp-tip">
+              <div className="bp-title">Items</div>
+              ${Object.values(CONSUMABLES).map(c => h`<div key=${c.id} className=${'bp-row' + (S.consumables[c.id] ? '' : ' none')}>
+                <span className="bp-ic">${ic('consumable.' + c.id, c.icon, 'cons-img')}</span><span className="bp-name">${c.name}</span><b>${S.consumables[c.id] || 0}</b>
+              </div>`)}
+              <div className="bp-hint">Used inside a run from the item bar.</div>
+            </div>` : null}
+          </div>`;
+        })()}
       </div>
-      <div className="kit-bar">
-        <div className="kit-group">
-          <span className="kit-label">Items</span>
-          ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} data-item=${c.id} className=${'kit-slot' + (S.consumables[c.id] ? '' : ' none')} title=${c.name}>
-            ${ic('consumable.' + c.id, c.icon, 'cons-img')}<b className="amt">${S.consumables[c.id] || 0}</b>
-          </span>`)}
-        </div>
       </div>
       ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross goal ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
     </div>

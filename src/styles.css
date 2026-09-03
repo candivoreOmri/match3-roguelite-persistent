@@ -1258,3 +1258,25 @@ button.ghost { background: none; border: 1px solid var(--border-strong); color: 
                border-radius: 0 0 16px 16px; border: 1px solid var(--accent); border-top: none;
                background: linear-gradient(180deg, rgba(60, 38, 110, .98), rgba(24, 16, 48, .96));
                box-shadow: 0 6px 14px rgba(0, 0, 0, .45), inset 0 3px 6px rgba(0, 0, 0, .35); }
+
+/* ---- CD: collapsible backpack at the Play button's bottom-left; items fly into it ---- */
+.backpack-wrap { position: absolute; left: -22px; bottom: -14px; z-index: 3; }
+.backpack { position: relative; width: 58px; height: 58px; padding: 0; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+            font-size: 28px; background: var(--raised); border: 1px solid var(--border-strong); box-shadow: 0 6px 14px rgba(0,0,0,.45); }
+.backpack.open { border-color: var(--gold); }
+.backpack .bp-img { width: 36px; height: 36px; }
+.backpack .amt { position: absolute; top: -7px; right: -7px; min-width: 20px; height: 20px; border-radius: 99px; background: var(--gold); color: #3a2b00;
+                 font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.backpack.hit { animation: dicehit .32s ease-out; }
+.bp-tip { position: absolute; left: 0; bottom: calc(100% + 10px); min-width: 190px; padding: 10px 12px; border-radius: 14px; z-index: 5;
+          background: rgba(18, 12, 38, .97); border: 1px solid var(--border-strong); box-shadow: 0 8px 24px rgba(0,0,0,.5);
+          display: flex; flex-direction: column; gap: 6px; animation: dslide .2s ease; }
+.bp-tip::after { content: ''; position: absolute; left: 22px; top: 100%; border: 7px solid transparent; border-top-color: var(--border-strong); }
+.bp-title { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+.bp-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.bp-row.none { opacity: .45; }
+.bp-ic { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.bp-ic .cons-img { width: 24px; height: 24px; }
+.bp-name { flex: 1; color: var(--text-mid); }
+.bp-row b { color: var(--gold); font-size: 15px; min-width: 20px; text-align: right; }
+.bp-hint { font-size: 10px; color: var(--text-faint); }

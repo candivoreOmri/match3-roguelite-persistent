@@ -113,6 +113,7 @@ with data-URI values as `window.__SKIN_INLINE__` (skin.js already reads it).
 | `consumable.<id>` (hammer, bomb, shuffle) | wallet + reveal popup | 256×256 |
 | `metaoffer.jackpot` | 💰 | 256×256 |
 | `icon.shop` | 🛍️ top-bar shop button (buys a die) | 256×256 |
+| `icon.backpack` | 🎒 collapsible items button at the Play button's bottom-left | 256×256 |
 | `ui.dice-button` | round red dice CTA face | 128×128, transparent corners; count + ROLL drawn by the UI |
 
 ## Tile styles (tester-switchable piece-art sets, 2026-09-02)

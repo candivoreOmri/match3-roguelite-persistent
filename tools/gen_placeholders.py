@@ -376,6 +376,7 @@ def main():
         jobs[f'consumable.{cid}'] = (f'hub/consumable-{cid}.png', lambda s=f'consumable.{cid}', e=ch: emoji_icon(s, e))
     jobs['metaoffer.jackpot'] = ('hub/metaoffer-jackpot.png', lambda: emoji_icon('metaoffer.jackpot', '💰'))
     jobs['icon.shop'] = ('icons/shop.png', lambda: emoji_icon('icon.shop', '🛍️'))
+    jobs['icon.backpack'] = ('icons/backpack.png', lambda: emoji_icon('icon.backpack', '🎒'))
     jobs['ui.dice-button'] = ('ui/dice-button.png', lambda: nine('ui.dice-button', 'dicebtn'))
     # ---- tile styles: every non-default style gets six pieces + boosted variants ----
     for sid, _name, sdir in TILE_STYLES:

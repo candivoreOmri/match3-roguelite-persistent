@@ -12,6 +12,7 @@
     "consumable.shuffle": "hub/consumable-shuffle.png",
     "die": "hub/die.png",
     "end.art": "app/end-art.png",
+    "icon.backpack": "icons/backpack.png",
     "icon.coin": "icons/coin.png",
     "icon.dice": "icons/dice.png",
     "icon.fillup": "icons/fillup.png",
