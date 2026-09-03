@@ -2238,9 +2238,8 @@ function MenuScreen({ G }) {
   const [dev, setDev] = React.useState(false);
   return h`<div className="screen menu">
     ${SKIN.has('logo')
-      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
-      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
-    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
+      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Mage Match" />`
+      : h`<h1>🏔️ Mage Match</h1>`}
     <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
     <${BlockerToggles} G=${G} />
     <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
@@ -2277,15 +2276,66 @@ function ColorDot({ color }) {
 
 // Shared draft card (CD, 2026-08-31): big icon on the LEFT, name (title font)
 // + description to the right, cluster tag as a ribbon off the right edge.
+/* CD copy pass (2026-09-01): ultra-short card titles — the pick's NAME shrinks
+   to a small kicker and this line is the big text. Tone: telegraphic, numbers
+   as +N. Full descriptions stay on the power-bar chip tooltips. A pick missing
+   here falls back to its long desc (visible = it needs a line adding). */
+const SHORT_DESC = {
+  boost: p => `${COLOR_NAMES[p.color]} tile +1`,
+  flood: () => 'Matches spread the colour',
+  spawner: () => 'Boosted matches spawn specials',
+  fillup: () => 'Boosted tiles charge a multiplier',
+  sweep: () => 'Vertical matches clear the colour',
+  converter: () => 'Matches paint one tile to a Boosted color',
+  spawnweight: () => 'More tiles drop more often',
+  purge: () => '4+ matches wipe the colour',
+  snowpaint: () => 'Boosted matches charge the snowball',
+  bombchance: () => `+${Math.round(CONFIG.BOMB_CHANCE_PER_PICK * 100)}% bomb spawns`,
+  countdown: () => 'Specials auto-explode',
+  blast: () => 'Bigger explosions',
+  specialscore: () => 'Specials +1',
+  rowclear: () => 'Horizontal match clears the row',
+  colclear: () => 'Vertical match clears the column',
+  matryoshka: () => 'Specials leave smaller specials',
+  aftershock: () => 'Explosions scorch nearby tiles',
+  fusionmove: () => 'Specials Merge grants extra move',
+  lava: () => 'Bottom row melts each move',
+  snowcrush: () => 'Specials charge the snowball',
+  expandrow: () => 'Board +1 row',
+  expandcol: () => 'Board +1 column',
+  xtramove: () => 'Spawn Xtra move tiles',
+  square: () => 'Square match',
+  squarebomb: () => 'Squares spawn bombs',
+  squarescore: () => `Squares +${CONFIG.SQUARE_BONUS_POINTS}`,
+  lifesaver: () => `Survive once, +${CONFIG.LIFESAVER_BONUS_MOVES} moves`,
+  momentum: () => 'Big matches charge an extra move',
+  chomper: () => 'A Chomper eats on the Board',
+  twinchomper: () => 'A second Chomper joins',
+  doublebite: () => 'Chomper eats twice',
+  gourmet: () => 'Chomper meals ×2',
+  spicytrail: () => "Chomper's trail burns",
+  bombtrail: () => 'Chomper leaves bombs',
+  buffet: () => 'More Chomper snacks',
+  conveyor: () => 'Board edges rotate',
+  diagswap: () => 'Swap diagonally',
+  pinata: () => 'Spawn pinata tiles who grant extra points',
+  tripletile: () => `Match the mark, move ×${CONFIG.TRIPLE_TILE_MULT}`,
+  chests: () => 'Chests who reach the bottom give rewards',
+};
+POWERUPS.square.name = '2×2'; // player-facing rename (CD, 2026-09-01)
+
 function DraftCard({ G, o, i }) {
   const def = POWERUPS[o.id];
+  // merged: Omri's card identity (cluster tint, parent line, tier badges)
+  // under the CD copy layout (name kicker + short title)
+  const short = SHORT_DESC[o.id] ? SHORT_DESC[o.id](o) : def.desc(o);
   const parent = parentOf(def); // data-driven from the requires* gate
   return h`<button className=${'card cl-' + def.cluster + (def.tier === 3 ? ' legendary-card' : '')} onClick=${() => G.pickOffer(i)}>
     <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
     <div className="card-main">
-      <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-kicker">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      <div className="card-name">${short}</div>
       ${parent ? h`<div className="card-parent"><span className="card-parent-ic">${puIcon(parent)}</span> ↑ ${POWERUPS[parent].name}</div>` : null}
-      <div className="card-desc">${def.desc(o)}</div>
     </div>
     <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
     ${def.tier === 2 ? h`<div className="card-tier t2" title="Deeper unlock">★</div>` : null}
@@ -2345,12 +2395,9 @@ function Board({ G }) {
   for (let r = 0; r < G.rows; r++) for (let c = 0; c < G.cols; c++) {
     const cellKey = K(r, c);
     const cellSlot = ((r + c) % 2) ? 'board.cell-alt' : 'board.cell';
-    // cell backs sit ~10% LOW: the stacked piece art overhangs downward, so
-    // the back aligns with the piece's body, not its upper face (CD)
-    const cellDrop = Math.round(cell * 0.10);
     bg.push(h`<div key=${'b' + r + '_' + c}
       className=${'bgcell' + (((r + c) % 2) ? ' alt' : '') + (SKIN.has(cellSlot) ? ' img' : '') + (G.marks.has(cellKey) ? ' mark' : '') + (G.pinatas.has(cellKey) ? ' pin' : '') + (G.triples.has(cellKey) ? ' tri' : '') + (G.foodCells.has(cellKey) ? ' foodc' : '')}
-      style=${{ transform: `translate(${c * cell}px,${r * cell + cellDrop}px)`, width: cell + 'px', height: cell + 'px',
+      style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px',
                 ...(SKIN.has(cellSlot) ? { backgroundImage: `url(${SKIN.url(cellSlot)})`, backgroundSize: '100% 100%' } : null) }}>
     </div>`);
     const t = G.board[r][c];
@@ -2440,10 +2487,8 @@ function Board({ G }) {
       style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.4) * cell + 'px' }}>${f.text}</div>`);
   }
 
-  // board height includes the last row's lip overhang (17% of a cell), so the
-  // frame's top and bottom gaps around the visible tiles come out equal (CD)
   return h`<div className=${'board' + (G.shake ? ' shake' : '')}
-    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + Math.round(cell * 0.17) + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
+    style=${{ width: G.cols * cell + 'px', height: G.rows * cell + 'px', '--shake-amp': (G.shake || 0) + 'px' }}
     onPointerDown=${onDown} onPointerMove=${onMove} onPointerUp=${onUp} onPointerLeave=${onUp}>
     ${bg}${tiles}${cellmarks}${fx}
   </div>`;
@@ -2583,7 +2628,7 @@ function LevelScreen({ G }) {
     <div className="callouts">${G.callouts.map(c => h`<div key=${c.id} className=${'callout ' + (c.cls || '')}>${c.text}</div>`)}</div>
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel goal-panel">
-        <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
+        <h2>Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
         <p className="carryline"><b>${cp.kept}</b> moves kept + <b>${cp.moves}</b> bonus = <b>${cp.total}</b>/${CONFIG.MAX_MOVES} 👟</p>
         <p className="carrysub">Leftover moves always carry over.</p>
         ${cp.final ? h`<p>Final goal cleared — the endless chase begins 🔥</p>` : null}

@@ -8,8 +8,8 @@
    override the dev-relative ones below.
    ========================================================================== */
 @font-face {
-  font-family: 'Fruktur';
-  src: url(fonts/Fruktur-Regular.ttf) format('truetype');
+  font-family: 'Alegreya';
+  src: url(fonts/Alegreya-ExtraBold.ttf) format('truetype');
   font-weight: 100 900; /* single cut serves every weight — no synthetic bold */
 }
 @font-face {
@@ -19,7 +19,8 @@
 }
 
 :root {
-  --font-display: 'Fruktur', 'Alegreya Sans', cursive;
+  /* display font swapped Fruktur -> Alegreya ExtraBold (CD, 2026-09-02) */
+  --font-display: 'Alegreya', 'Alegreya Sans', serif;
   --font-body: 'Alegreya Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   --bg: #171130;            /* page ground — deep violet night */
@@ -117,12 +118,13 @@ body {
   display: flex; flex-direction: column; align-items: center;
   padding: 16px 12px calc(16px + env(safe-area-inset-bottom));
 }
+/* Alegreya runs visually smaller than Fruktur did — display sizes bumped ~10% */
 h1 {
   font-family: var(--font-display); font-weight: 400;
-  font-size: 34px; margin: 18px 0 6px; text-align: center;
+  font-size: 38px; margin: 18px 0 6px; text-align: center;
 }
 h2 {
-  font-family: var(--font-display); font-weight: 400; font-size: 24px;
+  font-family: var(--font-display); font-weight: 400; font-size: 27px;
 }
 .sub { color: var(--text-dim); font-size: 15px; margin-bottom: 14px; text-align: center; }
 .hint { color: var(--text-faint); font-size: 13px; margin-top: 22px; text-align: center; line-height: 1.5; max-width: 360px; }
@@ -147,7 +149,7 @@ button {
 }
 button:active { transform: scale(0.97); }
 button.primary {
-  font-family: var(--font-display); font-weight: 400; font-size: 20px;
+  font-family: var(--font-display); font-weight: 400; font-size: 44px; /* CD: x2 */
   background: var(--cta); border: none; color: #fff;
   padding: 13px 24px; box-shadow: var(--cta-shadow);
 }
@@ -155,9 +157,10 @@ button.primary {
 .toggle b { color: var(--gold); }
 
 /* ------- menu (player-facing: logo + CTA; dev controls in the drawer) ------- */
-.menu { justify-content: center; padding-bottom: 264px; } /* centered above the bottom art panel */
+/* centered like the end screen: CTA lands just below the vertical center */
+.menu { justify-content: center; padding-bottom: 160px; }
 .menu-logo { width: 84%; max-width: 360px; }
-.menu-start { margin-top: 14px; min-width: 250px; font-size: 26px; padding: 16px 40px; }
+.menu-start { margin-top: 26px; min-width: 250px; font-size: 58px; padding: 12px 44px; } /* CD: x2 */
 .devtoggle {
   margin-top: 30px; font-size: 11px; font-weight: 800; letter-spacing: .1em;
   text-transform: uppercase; color: var(--text-faint);
@@ -188,7 +191,12 @@ button.primary {
 .card:active { border-color: var(--accent); }
 .card-icon { font-size: 40px; flex: none; min-width: 54px; display: flex; align-items: center; justify-content: center; gap: 5px; }
 .card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-right: 52px; }
-.card-name { font-family: var(--font-display); font-weight: 400; font-size: 19px; color: #fff; }
+/* copy pass (CD, 2026-09-01): name shrinks to a kicker, short line is the title */
+.card-kicker {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--text-dim);
+}
+.card-name { font-family: var(--font-display); font-weight: 400; font-size: 23px; color: #fff; line-height: 1.15; }
 .card-desc { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
 /* cluster tag as a ribbon off the card's right edge */
 .card-tag {
@@ -245,7 +253,7 @@ button.primary {
   padding: 5px 16px; line-height: 1.05; min-width: 96px; gap: 1px;
 }
 .hmb-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); }
-.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 36px; color: #fff; }
+.hmb-num { font-family: var(--font-display); font-weight: 400; font-size: 39px; color: #fff; }
 .hud-moves-box .movecap { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-faint); }
 .hud-moves-box.low {
   color: #fff; background: #8e2a24; border-color: rgba(255, 90, 76, .6);
@@ -364,17 +372,17 @@ button.primary {
 .cellmark .mark-img { width: 22px; height: 22px; }
 
 .tile { position: absolute; padding: 0; transition: transform .22s cubic-bezier(.3,.7,.35,1.1); will-change: transform; }
-/* stacked-volume piece art (CD, 2026-08-31): the square asset carries a top
-   face + bottom lip, so it renders ~17% taller than its cell — the lip
-   overhangs into the row below, and per-row z-order (set inline) lets upper
-   tiles rest on the ones beneath. */
+/* piece art at ORIGINAL FIT (CD iteration 2026-09-01): natural aspect,
+   contained in the cell, no stretch. (The previous stacked-lip treatment —
+   106%x117% object-fit:fill + overhang offsets — suited the boxy lipped
+   tiles; see git history if that art style returns.) */
 .piece-img {
-  position: absolute; left: -3%; top: 0; width: 106%; height: 117%;
-  object-fit: fill; pointer-events: none;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; pointer-events: none;
 }
-/* special glyphs paint OVER the coloured base tile, centered on its face */
+/* special glyphs paint OVER the coloured base piece, centered */
 .sp-img {
-  position: absolute; left: 19%; top: 12%; width: 62%; height: 62%;
+  position: absolute; left: 19%; top: 19%; width: 62%; height: 62%;
   object-fit: contain; pointer-events: none; z-index: 1;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35));
 }
@@ -604,8 +612,12 @@ button.primary {
   border-color: var(--gold);
   box-shadow: 0 0 34px rgba(255, 213, 74, .28), 0 6px 24px rgba(0, 0, 0, .4);
 }
+/* the draft CTA runs ~40% smaller than the full-size primaries (CD) */
+.goal-panel button.primary { font-size: 26px; padding: 10px 20px; }
 
-.end { justify-content: flex-start; padding-top: 56px; }
+/* end screen centered; padding tuned so the Play again CTA sits just BELOW
+   the screen's vertical center, with the art panel underneath (CD) */
+.end { justify-content: center; padding-bottom: 160px; }
 .end-sub {
   font-size: 13px; font-weight: 800; color: var(--text-dim);
   text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px;
@@ -641,7 +653,7 @@ button.primary {
 }
 .draft-title {
   font-family: var(--font-display); font-weight: 400;
-  text-align: center; font-size: 28px; color: #fff; margin-top: -6px;
+  text-align: center; font-size: 31px; color: #fff; margin-top: -6px;
 }
 .movecap { font-size: 11px; font-weight: 700; color: var(--text-dim); }
 .fill-fill.sfill { background: linear-gradient(90deg, #58a6ff, #bfe3ff); }
