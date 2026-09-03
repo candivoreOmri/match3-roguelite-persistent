@@ -303,6 +303,24 @@ def main():
         jobs[slot] = (f'ui/{slot.split(".")[1]}.png', lambda s=slot, k=kind: nine(s, k))
     jobs['ui.progressbar-track'] = ('ui/progressbar-track.png', lambda: pill('track'))
     jobs['ui.progressbar-fill'] = ('ui/progressbar-fill.png', lambda: pill('fill'))
+    # ---- board hub (M0, board-meta line) ----
+    for typ, ch in [('landmark', '🏠'), ('coin', '🪙'), ('consumable', '🧰'), ('modifier', '🔮'),
+                    ('mystery', '❔'), ('minigame_flip', '🎰'), ('minigame_scratch', '🎫'),
+                    ('metaoffer', '💼'), ('empty', '🌿'), ('boss', '👹')]:
+        jobs[f'mspace.{typ}'] = (f'hub/space-{typ}.png', lambda s=f'mspace.{typ}', e=ch: emoji_icon(s, e))
+    jobs['token'] = ('hub/token.png', lambda: emoji_icon('token', '🧗'))
+    jobs['die'] = ('hub/die.png', lambda: nine('die', 'die'))
+    for slot, ch in [('icon.dice', '🎲'), ('icon.coin', '🪙'), ('icon.lap', '🏁')]:
+        jobs[slot] = (f'icons/{slot.split(".")[1]}.png', lambda s=slot, e=ch: emoji_icon(s, e))
+    for n, ch in [(1, '🌿'), (2, '🏜️'), (3, '🏔️')]:
+        jobs[f'world.{n}.icon'] = (f'hub/world-{n}.png', lambda s=f'world.{n}.icon', e=ch: emoji_icon(s, e))
+    for n, ch in [(1, '🌈'), (2, '🗿'), (3, '🐉')]:
+        jobs[f'boss.{n}'] = (f'hub/boss-{n}.png', lambda s=f'boss.{n}', e=ch: emoji_icon(s, e))
+    for rid, ch in [('cpmoves', '🚩'), ('first2x', '✨'), ('startspecial', '🎆'), ('landmark', '🏠'), ('boss6', '🌈'), ('bosscold', '🥶')]:
+        jobs[f'runmod.{rid}'] = (f'hub/runmod-{rid}.png', lambda s=f'runmod.{rid}', e=ch: emoji_icon(s, e))
+    for cid, ch in [('hammer', '🔨'), ('bomb', '🧨'), ('shuffle', '🔀')]:
+        jobs[f'consumable.{cid}'] = (f'hub/consumable-{cid}.png', lambda s=f'consumable.{cid}', e=ch: emoji_icon(s, e))
+    jobs['metaoffer.jackpot'] = ('hub/metaoffer-jackpot.png', lambda: emoji_icon('metaoffer.jackpot', '💰'))
     for pid, ch in sorted(powerup_icons().items()):
         jobs[f'icon.powerup.{pid}'] = (f'powerups/{pid}.png',
                                        lambda s=f'icon.powerup.{pid}', e=ch: emoji_icon(s, e))

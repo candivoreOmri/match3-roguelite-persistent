@@ -1741,6 +1741,8 @@ const h = htm.bind(React.createElement);
 function slotImg(id, cls) {
   return SKIN.has(id) ? h`<img className=${cls || 'skin-img'} src=${SKIN.url(id)} alt="" />` : null;
 }
+// Any icon: slot art (em-sized, flows like a glyph) or its emoji fallback.
+function ic(slot, fallback, cls) { return slotImg(slot, cls || 'pu-img') || fallback; }
 // Power-up icon: slot art (em-sized, flows like a glyph) or the roster emoji.
 function puIcon(id) {
   return slotImg('icon.powerup.' + id, 'pu-img') || POWERUPS[id].icon;
@@ -1887,7 +1889,7 @@ function RunModChips({ mods, label }) {
     ${[...byId].map(([id, count]) => {
       const d = RUN_MODIFIERS[id];
       return h`<span key=${id} className=${'chip modchip' + (d.negative ? ' negative' : '')} title=${`${d.name} — ${d.desc}`}>
-        ${d.icon}${count > 1 ? h`<b>×${count}</b>` : null}
+        ${ic('runmod.' + id, d.icon)}${count > 1 ? h`<b>×${count}</b>` : null}
       </span>`;
     })}
   </div>`;
@@ -1897,7 +1899,7 @@ function ConsumableRow() {
   const inv = META.state.consumables;
   return h`<span className="binv">
     ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} className=${'binv-item' + (inv[c.id] ? '' : ' none')} title=${c.name}>
-      ${c.icon}<b>${inv[c.id] || 0}</b>
+      ${ic('consumable.' + c.id, c.icon)}<b>${inv[c.id] || 0}</b>
     </span>`)}
   </span>`;
 }
@@ -1970,11 +1972,11 @@ function MysteryBox({ reward, onDone }) {
   };
   return h`<div className="minigame-body">
     ${!open
-      ? h`<div className="mystery-box" onClick=${doOpen}>🎁</div><button className="primary" onClick=${doOpen}>Open it</button>`
+      ? h`<div className="mystery-box" onClick=${doOpen}>${ic('mspace.mystery', '🎁', 'mg-img')}</div><button className="primary" onClick=${doOpen}>Open it</button>`
       : h`<div className="mystery-reveal">
-            ${reward.kind === 'coins' ? h`<div className="mg-bigicon">🪙</div><div className="mg-result"><b className="gold">+${reward.coins} coins</b></div>`
-            : reward.kind === 'consumable' ? h`<div className="mg-bigicon">${CONSUMABLES[reward.item].icon}</div><div className="mg-result"><b>${CONSUMABLES[reward.item].name}</b> added to your kit</div>`
-            : h`<div className="mg-bigicon">🎲</div><div className="mg-result"><b className="gold">+${reward.dice} die</b></div>`}
+            ${reward.kind === 'coins' ? h`<div className="mg-bigicon">${ic('icon.coin', '🪙', 'mg-img')}</div><div className="mg-result"><b className="gold">+${reward.coins} coins</b></div>`
+            : reward.kind === 'consumable' ? h`<div className="mg-bigicon">${ic('consumable.' + reward.item, CONSUMABLES[reward.item].icon, 'mg-img')}</div><div className="mg-result"><b>${CONSUMABLES[reward.item].name}</b> added to your kit</div>`
+            : h`<div className="mg-bigicon">${ic('icon.dice', '🎲', 'mg-img')}</div><div className="mg-result"><b className="gold">+${reward.dice} die</b></div>`}
           </div>
           <button className="primary" onClick=${onDone}>Collect</button>`}
   </div>`;
@@ -1985,20 +1987,20 @@ function SpaceRevealPopup({ ui, world, onClose }) {
   const t = SPACE_TYPES[ui.type] || SPACE_TYPES.empty;
   const body = (() => {
     switch (ui.type) {
-      case 'coin': return h`<div className="mg-bigicon">🪙</div><div className="mg-result"><b className="gold">+${ui.coins} coins</b></div><button className="primary" onClick=${onClose}>Collect</button>`;
-      case 'consumable': return h`<div className="mg-bigicon">${CONSUMABLES[ui.item].icon}</div><div className="mg-result"><b>${CONSUMABLES[ui.item].name}</b> added to your kit</div><button className="primary" onClick=${onClose}>Take it</button>`;
+      case 'coin': return h`<div className="mg-bigicon">${ic('icon.coin', '🪙', 'mg-img')}</div><div className="mg-result"><b className="gold">+${ui.coins} coins</b></div><button className="primary" onClick=${onClose}>Collect</button>`;
+      case 'consumable': return h`<div className="mg-bigicon">${ic('consumable.' + ui.item, CONSUMABLES[ui.item].icon, 'mg-img')}</div><div className="mg-result"><b>${CONSUMABLES[ui.item].name}</b> added to your kit</div><button className="primary" onClick=${onClose}>Take it</button>`;
       case 'modifier': {
         const d = RUN_MODIFIERS[ui.mod];
-        return h`<div className="mg-bigicon">${d.icon}</div><div className="mg-title">${d.name}</div><p className="mg-desc">${d.desc}</p><p className="mg-sub">Active for your next run only</p><button className="primary" onClick=${onClose}>Nice</button>`;
+        return h`<div className="mg-bigicon">${ic('runmod.' + ui.mod, d.icon, 'mg-img')}</div><div className="mg-title">${d.name}</div><p className="mg-desc">${d.desc}</p><p className="mg-sub">Active for your next run only</p><button className="primary" onClick=${onClose}>Nice</button>`;
       }
       case 'mystery': return h`<${MysteryBox} reward=${ui.reward} onDone=${onClose} />`;
       case 'minigame_flip': return h`<${CoinFlipGame} onDone=${onClose} />`;
       case 'minigame_scratch': return h`<${ScratchGame} onDone=${onClose} />`;
       case 'metaoffer': { // v11: auto-applied on landing — a net positive needs no decline
         const offer = META_POWERUPS[ui.offer];
-        return h`<div className="mg-bigicon">${offer.icon}</div><div className="mg-title">${offer.name}</div><div className="mg-result gold">${offer.desc}</div><button className="primary" onClick=${onClose}>Collect</button>`;
+        return h`<div className="mg-bigicon">${ic('metaoffer.' + ui.offer, offer.icon, 'mg-img')}</div><div className="mg-title">${offer.name}</div><div className="mg-result gold">${offer.desc}</div><button className="primary" onClick=${onClose}>Collect</button>`;
       }
-      case 'landmark': return h`<div className="mg-bigicon">🏠</div><div className="mg-result">Welcome home — lap complete!</div><p className="mg-desc">+${CONFIG.LANDMARK_MOVE_BONUS} starting move banked for your next run.</p><button className="primary" onClick=${onClose}>Onward</button>`;
+      case 'landmark': return h`<div className="mg-bigicon">${ic('mspace.landmark', '🏠', 'mg-img')}</div><div className="mg-result">Welcome home — lap complete!</div><p className="mg-desc">+${CONFIG.LANDMARK_MOVE_BONUS} starting move banked for your next run.</p><button className="primary" onClick=${onClose}>Onward</button>`;
       default: return h`<button className="primary" onClick=${onClose}>OK</button>`;
     }
   })();
@@ -2012,7 +2014,7 @@ function SpaceRevealPopup({ ui, world, onClose }) {
 function BossOfferPanel({ world, onFight, onFlee }) {
   return h`<div className="overlay"><div className="panel spacepanel sp-boss">
     <div className="sp-label">BOSS</div>
-    <div className="mg-bigicon boss-icon">${world.boss.icon}</div>
+    <div className="mg-bigicon boss-icon">${ic(`boss.${world.id}`, world.boss.icon, 'mg-img')}</div>
     <div className="mg-title">${world.boss.name}</div>
     <p className="mg-desc">World ${world.id} boss run — reach the final flag to clear it and advance to the next world.</p>
     <div className="boss-mods">
@@ -2038,7 +2040,7 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
     return h`<div key=${i} style=${{ left: x + '%', top: y + '%' }}
       className=${'bspace ' + t.cls + (i === pos ? ' here' : '')}
       title=${t.label}>
-      <div className="bspace-in">${type === 'empty' ? world.icon : t.icon}</div>
+      <div className="bspace-in">${type === 'empty' ? ic(`world.${world.id}.icon`, world.icon, 'mspace-img') : ic('mspace.' + type, t.icon, 'mspace-img')}</div>
     </div>`;
   });
   const { x, y } = spaceXY(pos);
@@ -2048,7 +2050,7 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
     ${spaces}
     <div className=${'btoken' + (moving ? ' moving' : '')}
       style=${{ left: x + '%', top: y + '%', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
-      <div key=${hopKey} className="btoken-in" style=${{ animationDuration: hopMs + 'ms' }}>🧗</div>
+      <div key=${hopKey} className="btoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
     </div>
   </div>`;
 }
@@ -2170,8 +2172,8 @@ function BoardScreen({ G }) {
 
   return h`<div className="screen board-screen">
     <div className="bhead">
-      <div className="bworld">${world.icon} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
-      <div className="bwallet"><span className="bcoins">🪙 ${S.coins}</span><${ConsumableRow} /></div>
+      <div className="bworld">${ic(`world.${S.world}.icon`, world.icon)} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
+      <div className="bwallet"><span className="bcoins">${ic('icon.coin', '🪙')} ${S.coins}</span><${ConsumableRow} /></div>
     </div>
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <${RunModChips} mods=${S.modifiers} label="Next run:" />
@@ -2179,19 +2181,19 @@ function BoardScreen({ G }) {
       <button className="bspeed" title="Board animation speed" onClick=${cycleSpeed}>⏩ ×${speed()}</button>
       <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
       <div className="bhub">
-        <div className="bdice-count">🎲 <b>${S.dice}</b></div>
-        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '')}
-          style=${ui.mode === 'rolling' ? { animationDuration: spd(280) + 'ms' } : null}>${face}</div>
+        <div className="bdice-count">${ic('icon.dice', '🎲')} <b>${S.dice}</b></div>
+        <div className=${'bdie' + (ui.mode === 'rolling' ? ' rolling' : '') + (SKIN.has('die') ? ' skinned' : '')}
+          style=${{ ...(ui.mode === 'rolling' ? { animationDuration: spd(280) + 'ms' } : null), ...(SKIN.has('die') ? { backgroundImage: `url(${SKIN.url('die')})` } : null) }}>${face}</div>
         <button className="primary broll" disabled=${busy || S.dice <= 0} onClick=${roll}>
-          ${S.dice > 0 ? 'Roll 🎲' : 'No dice'}
+          ${S.dice > 0 ? h`Roll ${ic('icon.dice', '🎲')}` : 'No dice'}
         </button>
         <button className="bbuy" disabled=${busy || S.coins < CONFIG.DICE_PRICE_COINS}
           onClick=${() => { if (META.buyDie()) { note('🎲 +1 die!'); G.render(); } }}>
-          +1 🎲 for ${CONFIG.DICE_PRICE_COINS} 🪙
+          +1 ${ic('icon.dice', '🎲')} for ${CONFIG.DICE_PRICE_COINS} ${ic('icon.coin', '🪙')}
         </button>
-        <div className="blaps">🏁 Lap ${S.laps}</div>
+        <div className="blaps">${ic('icon.lap', '🏁')} Lap ${S.laps}</div>
         <div className=${'bboss-progress' + (bossReady ? ' ready' : '')}>
-          👹 ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'READY' : `${S.worldLaps}/${world.lapsForBoss} laps`}
+          ${ic(`boss.${S.world}`, '👹')} ${META.state.bossDefeated.includes(S.world) ? 'beaten ✓' : bossReady ? 'READY' : `${S.worldLaps}/${world.lapsForBoss} laps`}
         </div>
       </div>
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
@@ -2199,7 +2201,7 @@ function BoardScreen({ G }) {
     ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross checkpoint ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
     ${bossReady
       ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>⚔️ Fight ${world.boss.name}</button>`
-      : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>▶ Start run</button>`}
+      : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>Play run</button>`}
     <details className="tester-tools">
       <summary>🧪 Tester tools</summary>
       <div className="menu-box">

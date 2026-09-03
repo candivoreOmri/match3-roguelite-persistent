@@ -98,3 +98,17 @@ Colour-bearing power-ups (e.g. `boost`) may add bespoke per-colour files:
 `build.sh` bundles only CSS+JS. Fonts are inlined as data URIs at build time.
 When the first P1 art lands, `build.sh` gains a step that inlines `skin.json`
 with data-URI values as `window.__SKIN_INLINE__` (skin.js already reads it).
+
+## P2 — board hub (board-meta line, added 2026-09-02)
+
+| Slot | Replaces | Spec |
+| --- | --- | --- |
+| `mspace.<type>` (landmark, coin, consumable, modifier, mystery, minigame_flip, minigame_scratch, metaoffer, empty, boss) | emoji on the loop spaces | 256×256 icon (M2 turns spaces into full iso tile art — same slot ids) |
+| `token` | 🧗 | 256×256 |
+| `die` | white CSS die | 128×128 blank die face; the rolled number is drawn on top by the UI |
+| `icon.dice` `icon.coin` `icon.lap` | 🎲 🪙 🏁 (dice count, wallet, lap counter, CTAs) | 256×256 |
+| `world.<n>.icon` (1–3) | 🌿 🏜️ 🏔️ header + empty spaces | 256×256 |
+| `boss.<n>` (1–3) | 🌈 🗿 🐉 boss progress + offer panel | 256×256 |
+| `runmod.<id>` (cpmoves, first2x, startspecial, landmark, boss6, bosscold) | run-modifier chips + reveal popup | 256×256 |
+| `consumable.<id>` (hammer, bomb, shuffle) | wallet + reveal popup | 256×256 |
+| `metaoffer.jackpot` | 💰 | 256×256 |
