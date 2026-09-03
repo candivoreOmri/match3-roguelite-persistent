@@ -119,6 +119,15 @@ class Game {
   // Seam for variants: tiles the player can never swap. Base: chomper only.
   immovableTile(t) { return !!(t && t.chomper); }
 
+  // Seam for variants: a clear attempt (match extras, line clears, sweeps,
+  // explosions) landed on a protected tile. opts carries kind/src/depth.
+  // Base: nothing happens — protected tiles just don't clear.
+  onTileProtected(r, c, t, opts) {}
+
+  // Seam for variants: called when a protected tile stops Chomper's step
+  // (the blocker's cell + tile). Base: nothing happens — he just stays put.
+  onChomperBlocked(r, c, t) {}
+
   // Seam for variants: tiles gravity never moves — they hang in place, tiles
   // above them stack on top, and slots beneath them stay EMPTY (refills only
   // enter a column from the top). Base: none.
@@ -530,7 +539,8 @@ class Game {
     const addClear = (r, c, explosion, opts = {}) => {
       if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) return false;
       const t = this.board[r][c];
-      if (!t || this.protectedTile(t)) return false; // protected tiles are indestructible
+      if (!t) return false;
+      if (this.protectedTile(t)) { this.onTileProtected(r, c, t, opts); return false; } // indestructible — but the hit is reported
       const k = K(r, c);
       if (cleared.has(k)) return false;
       const delay = Math.min(500, opts.delay || 0);
@@ -785,12 +795,23 @@ class Game {
       this.board[r][c] = tile;
       setTimeout(() => { delete tile.fresh; }, 400);
     }
-    for (const f of res.floods) {
+  }
+
+  // Flood / Converter conversions — applied AFTER gravity settles (they used
+  // to run pre-gravity inside applyStep, which let a conversion recolour a
+  // tile that was about to complete a cascade, silently denying it, and made
+  // the avoid-cascade preference judge a board that no longer existed).
+  // Tiles that are part of a SETTLED match are never conversion targets.
+  applyFloods(floods) {
+    if (!floods || !floods.length) return;
+    const matched = new Set();
+    for (const g of this.findGroups()) for (const cl of g.cells) matched.add(K(cl.r, cl.c));
+    for (const f of floods) {
       const cands = [], seen = new Set();
       if (f.cells) { // adjacent to the matched group (Flood)
         for (const cl of f.cells) for (const [dr, dc] of DIRS4) {
           const r = cl.r + dr, c = cl.c + dc, k = K(r, c);
-          if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k)) continue;
+          if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seen.has(k) || matched.has(k)) continue;
           seen.add(k);
           const t = this.board[r][c];
           if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) cands.push({ r, c });
@@ -800,6 +821,7 @@ class Game {
         // should set up plays, not constantly fire free cascades
         const risky = [];
         for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+          if (matched.has(K(r, c))) continue; // never steal a tile from a pending cascade
           const t = this.board[r][c];
           if (t && !t.pop && !this.protectedTile(t) && t.color !== f.color) {
             (this.wouldMatchAt(r, c, f.color) ? risky : cands).push({ r, c });
@@ -912,6 +934,7 @@ class Game {
       this.render(); await this.sleep(CONFIG.POP_MS + res.maxDelay);
       this.applyStep(res);
       await this.dropAndFill();
+      this.applyFloods(res.floods); // conversions land on the SETTLED board
       await this.sleep(CONFIG.STEP_PAUSE);
     }
   }
@@ -992,7 +1015,7 @@ class Game {
         const k = K(nr, nc);
         if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k)) break;
         const prey = this.board[nr][nc];
-        if (prey && this.protectedTile(prey)) break; // he can't eat protected pieces
+        if (prey && this.protectedTile(prey)) { this.onChomperBlocked(nr, nc, prey); break; } // he can't eat protected pieces
         s.t.chomp = true;
         const tile = s.t;
         setTimeout(() => { delete tile.chomp; this.render(); }, 500);
@@ -1082,6 +1105,22 @@ class Game {
     return count(0, -1) + count(0, 1) >= 2 || count(-1, 0) + count(1, 0) >= 2;
   }
 
+  // Seam for variants: what merging two adjacent specials does. Base:
+  // arrow+arrow fuse into a cross; any other pair is the sum of its parts.
+  async resolveMerge(a, b, ta, tb) {
+    if (ta.special === 'arrow' && tb.special === 'arrow') {
+      // Two arrows fuse into a cross at the landing cell: full row + column.
+      // The cross REPLACES both arrow effects (even if both cleared the same
+      // direction), so the leftover arrow is stripped rather than chained.
+      tb.special = 'cross'; tb.dir = null;
+      ta.special = null; ta.dir = null; ta.countdown = null;
+      await this.explodeSeeds([b]);
+    } else {
+      // Any other pair: both pieces just activate — the sum of their parts.
+      await this.explodeSeeds([a, b]);
+    }
+  }
+
   swapTiles(a, b) {
     const t = this.board[a.r][a.c];
     this.board[a.r][a.c] = this.board[b.r][b.c];
@@ -1133,17 +1172,7 @@ class Game {
       this.addWave(b.r, b.c, 4, 0);
       this.doShake(10);
       this.emit('onMerge', a, b);
-      if (ta.special === 'arrow' && tb.special === 'arrow') {
-        // Two arrows fuse into a cross at the landing cell: full row + column.
-        // The cross REPLACES both arrow effects (even if both cleared the same
-        // direction), so the leftover arrow is stripped rather than chained.
-        tb.special = 'cross'; tb.dir = null;
-        ta.special = null; ta.dir = null; ta.countdown = null;
-        await this.explodeSeeds([b]);
-      } else {
-        // Any other pair: both pieces just activate — the sum of their parts.
-        await this.explodeSeeds([a, b]);
-      }
+      await this.resolveMerge(a, b, ta, tb);
     } else {
       await this.resolveBoard([a, b]);
     }

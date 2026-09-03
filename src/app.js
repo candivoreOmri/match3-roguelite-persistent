@@ -20,7 +20,7 @@ const CONFIG = {
   // NOTE: the board-meta line counted v9-v14 while the blockers/food line
   // independently counted v9-v10 — v15 is the first shared number after the
   // two branches merged (2026-09-01).
-  BALANCE_VERSION: 16, // v16: blocker spawn rework (scattered boxes, per-segment water floods, box bombs 2-3)
+  BALANCE_VERSION: 22, // v22: board-meta v16 (hub, per-world curves, blocker spawn rework) merged with main v21 (merge combos, line clears damage blockers, carry-over messaging)
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type unlocks once
@@ -130,6 +130,10 @@ const CONFIG = {
     [8, 10, 11, 12, 13],
     [8, 10, 11, 12, 13],
   ],
+  // MERGE NOTE (2026-09-02, Omri OoO): main's single-curve CHECKPOINTS /
+  // START_MOVES / CHECKPOINT_MOVES (v16 ease + v19 interim art ease) are NOT
+  // carried here — the board-meta line replaced them with the per-world tables
+  // above. Worlds 2/3 still run the pre-ease v3 curve; revisit when Omri is back.
   DRAFT_OPTIONS: 3,                // 2 or 3 — also toggleable in the UI
 
   // Per-move drip spawns — replaces the base game's per-level seeding of
@@ -706,6 +710,54 @@ const META = {
   }
 }
 
+/* --------------------------- Card copy pass -------------------------------
+   v21.1 (Omri, 2026-09-01): shorter, verb-first card text — one line per
+   power-up, numbers only where they change a decision. Edit freely; this
+   block is applied LAST so it wins over the mechanic patches above.
+   (Colour boost keeps its dynamic desc — it needs the rolled colour.) */
+const CARD_COPY = {
+  fillup:      () => 'Match boosted tiles to charge a +1 score multiplier (one charge — pick again for more)',
+  spawner:     () => 'Boosted matches can spawn special pieces (stacks)',
+  converter:   () => 'Every match you make turns one tile into your boosted colour',
+  spawnweight: () => 'Boosted colours drop in more often (stacks)',
+  purge:       () => 'Your 4+ matches clear that whole colour',
+  sweep:       () => 'Your vertical matches clear that whole colour',
+  snowcrush:   () => 'Destroy specials to charge the snowball — every full bar adds +3 to all your matches (stacks)',
+  snowpaint:   () => 'Boosted matches charge the snowball — every full bar adds +3 to all your matches',
+  bombchance:  () => 'New tiles can drop in as bombs (stacks)',
+  countdown:   () => ACTIVE_GAME && ACTIVE_GAME.run && ACTIVE_GAME.run.picks.some(p2 => p2.id === 'countdown')
+    ? 'Shorter fuse — specials now explode the move they appear'
+    : 'Specials explode on their own after 2 moves (pick again for a shorter fuse)',
+  blast:       () => 'Bombs blast one ring bigger (stacks)',
+  specialscore:() => 'Specials score +1 when they blow (stacks)',
+  rowclear:    () => 'Your sideways matches clear the whole row',
+  colclear:    () => 'Your up-down matches clear the whole column',
+  matryoshka:  () => 'Exploding specials leave a smaller special behind',
+  aftershock:  () => 'Explosions scorch nearby tiles — match one for a bonus blast',
+  fusionmove:  () => 'Merge two specials to get +1 move',
+  lava:        () => 'The bottom row melts away after every move',
+  expandrow:   () => 'The board grows by a row (stacks)',
+  expandcol:   () => 'The board grows by a column (stacks)',
+  xtramove:    () => 'Match over 🔄 tiles to get a move back (pick again for more tiles)',
+  square:      () => '2×2 squares count as matches and spawn a dynamite',
+  squarebomb:  () => 'Squares spawn a bomb instead',
+  squarescore: () => 'Square tiles score double',
+  momentum:    () => 'Make 4+ matches to get extra moves (stacks)',
+  pinata:      () => 'Piñatas appear — hit one 5 times for +50',
+  tripletile:  () => 'A ×3 tile appears — match over it to triple that whole move',
+  chests:      () => 'Chests drop in — carry them to the bottom for points or moves',
+  diagswap:    () => 'You can swap diagonally',
+  conveyor:    () => 'The board\'s outer ring rotates after every move',
+  chomper:     () => 'A hungry critter eats one piece after each move — 🍖 snacks pay +20, specials go boom',
+  twinchomper: () => 'A second Chomper joins the board',
+  doublebite:  () => 'Chomper takes an extra bite each move (stacks)',
+  gourmet:     () => 'Pieces Chomper eats score double',
+  spicytrail:  () => 'Chomper\'s trail stays scorched — match it for bonus blasts',
+  bombtrail:   () => 'Chomper leaves live bombs behind him',
+  buffet:      () => '2 more 🍖 snacks on the board (stacks)',
+};
+for (const [id, desc] of Object.entries(CARD_COPY)) if (POWERUPS[id]) POWERUPS[id].desc = desc;
+
 /* ========================== PERSISTENT GAME ================================
    Subclass seams (called by the shared engine):
      startLevel   — pickOffer lands here after every draft: first pick builds
@@ -720,6 +772,9 @@ class PersistentGame extends Game {
   constructor(onRender) {
     super(onRender);
     ACTIVE_GAME = this; // CONFIG getters + roster patches read live run state
+    // v20: per-blocker pre-run toggles — OFF by default (Omri). The intro
+    // checkpoints still gate spawn timing for any type switched on.
+    this.opts.blockers = { box: false, water: false, safe: false };
     this.marks = new Set();
     this.drip = { pinata: 0, chest: 0, triple: 0 }; // dry-move pity counters
     this.pendingChests = 0;      // chests queued to ride in on the next refill
@@ -829,6 +884,23 @@ class PersistentGame extends Game {
   // ("Opening act" first-match ×2 lives in the processStep override below,
   // merged with the blocker step effects — a class can only define it once.)
 
+  // 🧪 Tester tool: queued ids are injected into the next draft's first slot,
+  // bypassing tier/gate rules on purpose. Drafts touched this way are marked
+  // in draftHistory (forced: true) so pick-rate telemetry can exclude them.
+  makeOffers() {
+    const offers = super.makeOffers();
+    if (this.forcedOffers && this.forcedOffers.length && offers.length) {
+      const id = this.forcedOffers.shift();
+      const def = POWERUPS[id];
+      if (def) {
+        offers[0] = { id, ...(def.roll ? def.roll(this) : {}) };
+        this._forcedDraft = true;
+        this.callout(`🧪 Forced offer: ${def.name}`);
+      }
+    }
+    return offers;
+  }
+
   // Countdown stacks exactly once: after the 2nd pick it leaves the pool.
   computeMods() {
     super.computeMods();
@@ -905,6 +977,11 @@ class PersistentGame extends Game {
   async startLevel() {
     if (!this.board) this.startBoard(); // safety — newRun builds it before any draft
     const pick = this.run.picks[this.run.picks.length - 1];
+    if (this._forcedDraft) { // 🧪 tester-forced draft — flag it for telemetry hygiene
+      this._forcedDraft = false;
+      const h = this.run.draftHistory[this.run.picks.length - 1];
+      if (h) h.forced = true;
+    }
     this.dripSeedFor(pick); // new drip power-ups land their first spawn instantly
     const def = POWERUPS[pick.id];
     if (def.onLevelStart) def.onLevelStart(this, pick); // spawn-once hooks (chomper family)
@@ -1134,7 +1211,10 @@ class PersistentGame extends Game {
       this.tempoUsed = false; // Tempo re-arms for the new segment
     }
     if (crossed) {
-      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted };
+      this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted,
+                              kept: this.movesLeft - granted, total: this.movesLeft, // carry-over made visible
+                              final: this.run.finalReached };
+      this.addFx(0.2, this.cols / 2 - 0.5, `👟 +${granted}`, 'gold big');
       this.phase = 'checkpoint';
       return;
     }
@@ -1176,6 +1256,7 @@ class PersistentGame extends Game {
       runMods: this.runMods.map(m => m.id),
       foodEaten: this.segFood || 0,  // chomper snacks eaten this segment
       blockers: { ...this.segBlockers }, // boxes broken / water removed / safes opened
+      blockersOn: Object.keys(this.opts.blockers || {}).filter(k => this.opts.blockers[k]), // v20 toggles (unused here — board-meta gates by world)
       fast: !!this.fast, // bot/test runs — excluded from human summaries
     });
     this.segStartScore = this.score;
@@ -1245,7 +1326,7 @@ class PersistentGame extends Game {
 
   rollBlockerTile() {
     for (const [type, def] of Object.entries(BLOCKERS)) {
-      if (def.mode !== 'refill') continue; // drip/segment types place directly on the board (v16)
+      if (def.mode !== 'refill') continue; // drip/segment types place directly on the board (v16) // (main's v20 pre-run toggles default OFF and would mute world-gated blockers — not applied)
       if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
       if (this.blockerCount(type) >= def.cap()) continue;
       if (this.rng() < def.chance())
@@ -1323,9 +1404,11 @@ class PersistentGame extends Game {
   // and removing a water chain-removes the connected puddle.
   processStep(groups, swapCells, seeds, boardClears = []) {
     const before = this.score; // for the "Opening act" board modifier below
+    this._blockerHitStep = new Set(); // one damage event per blocker per step (v21)
     const res = super.processStep(groups, swapCells, seeds, boardClears);
     if (groups.length) this.blockerMatchEffects(groups);
-    this.blockerExplosionEffects(res);
+    // (v21: special explosions damage blockers through the hit set inside the
+    //  step pipeline — board-meta's blockerExplosionEffects pass is superseded)
     // "Opening act" board modifier: the run's first scoring step pays double.
     if (this.first2x && res.cnt) {
       this.first2x = false;
@@ -1339,23 +1422,33 @@ class PersistentGame extends Game {
     return res;
   }
 
-  // Special-piece explosions AFFECT blockers (they still aren't cleared by
-  // them): a blast covering a box deals 1 hit, water in the blast is removed
-  // (chain rule applies), and a safe lights the exploding special's colour.
-  // Runs before applyStep, so exploding specials are still on the board.
-  blockerExplosionEffects(res) {
-    const hit = new Set(); // one effect per blocker per step
-    for (const { r, c, explosion } of res.cleared.values()) {
-      const t = this.board[r][c];
-      if (!t || !t.special) continue; // every cleared special explodes (invariant)
-      for (const cl of this.explosionCells(r, c, t)) {
-        const b = this.board[cl.r][cl.c];
-        if (!b || !b.blocker || hit.has(b.id)) continue;
-        hit.add(b.id);
-        if (b.blocker === 'water') this.removeWaterChain(cl.r, cl.c);
-        else if (b.blocker === 'box') this.damageBox(cl.r, cl.c, b);
-        else if (b.blocker === 'safe') this.lightSafe(cl.r, cl.c, b, t.color);
+  // v21: EVERY clear attempt that lands on a blocker damages it — explosions
+  // (as before) and now also row/column clears, sweeps, and purges (tester:
+  // 'row clear doesn't affect blockers'). Boxes take 1 hit, water is removed
+  // (chain rule), safes light the source special's colour when the hit came
+  // from an explosion ('e{r},{c}' src carries the exploding piece), otherwise
+  // one random unlit colour (same rule as Chomper bumps).
+  onTileProtected(r, c, t, opts) {
+    if (!t.blocker) return; // chests/chompers stay silently indestructible
+    if (!this._blockerHitStep) this._blockerHitStep = new Set();
+    if (this._blockerHitStep.has(t.id)) return;
+    this._blockerHitStep.add(t.id);
+    if (t.blocker === 'water') { this.removeWaterChain(r, c); return; }
+    if (t.blocker === 'box') { this.damageBox(r, c, t); return; }
+    if (t.blocker === 'safe') {
+      let color = -1;
+      if (opts && opts.src && opts.src[0] === 'e') { // explosion: use the source special's colour
+        const [sr, sc] = opts.src.slice(1).split(',').map(Number);
+        const src = this.board[sr] && this.board[sr][sc];
+        if (src && src.color >= 0) color = src.color;
       }
+      if (color < 0) { // colourless hit (line clear etc.): one random unlit slot
+        const unlit = [];
+        for (let i = 0; i < this.opts.colours; i++) if (!t.lit.includes(i)) unlit.push(i);
+        if (!unlit.length) return;
+        color = unlit[Math.floor(this.rng() * unlit.length)];
+      }
+      this.lightSafe(r, c, t, color);
     }
   }
 
@@ -1385,6 +1478,68 @@ class PersistentGame extends Game {
         else if (t.blocker === 'safe') this.lightSafe(r, c, t, g.color);
       }
     }
+  }
+
+  // Chomper can't pass through blockers — but the ATTEMPT counts as a hit:
+  // a bumped box takes 1 damage, bumped water is removed (chain rule), and a
+  // bumped safe lights one random UNLIT colour. Chests and other chompers
+  // still block silently, as before.
+  onChomperBlocked(r, c, t) {
+    if (!t.blocker) return;
+    this.doShake(3);
+    if (t.blocker === 'water') this.removeWaterChain(r, c);
+    else if (t.blocker === 'box') this.damageBox(r, c, t);
+    else if (t.blocker === 'safe') {
+      const unlit = [];
+      for (let i = 0; i < this.opts.colours; i++) if (!t.lit.includes(i)) unlit.push(i);
+      if (unlit.length) this.lightSafe(r, c, t, unlit[Math.floor(this.rng() * unlit.length)]);
+    }
+  }
+
+  // v21 merge combos — merging specials should feel BIG (tester feedback):
+  //   ➡️+➡️  cross (full row + column)                       [base behaviour]
+  //   💣+💣  MEGA bomb (blast radius +2 for this explosion)
+  //   💣+➡️  the arrow upgrades to a cross, both fire
+  //   ⚡+➡️  colour clear + a cross
+  //   ⚡+💣  colour clear + a bigger bomb (radius +1)
+  //   ⚡+⚡  NOVA — the whole board clears (board effect: scores and chains
+  //          specials, fires no match hooks, marks stay — same rules as lava)
+  //   anything with 🧨 keeps the sum-of-parts default
+  async resolveMerge(a, b, ta, tb) {
+    const pair = [ta.special, tb.special].sort().join('+');
+    const boost = async (n, seeds) => {
+      this.mods.blastBonus += n; // transient — computeMods rebuilds on next pick
+      try { await this.explodeSeeds(seeds); } finally { this.mods.blastBonus -= n; }
+    };
+    if (pair === 'lightning+lightning') {
+      this.callout('🌩️ NOVA!');
+      this.doShake(14);
+      this.addWave(b.r, b.c, Math.max(this.rows, this.cols), 0);
+      const cells = [];
+      for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+        const t = this.board[r][c];
+        if (t && !this.protectedTile(t)) cells.push({ r, c });
+      }
+      const res = this.processStep([], null, [], cells);
+      if (res.cnt) {
+        this.render(); await this.sleep(CONFIG.POP_MS + res.maxDelay);
+        this.applyStep(res);
+        await this.dropAndFill();
+        this.applyFloods(res.floods);
+        await this.resolveBoard(null);
+      }
+      return;
+    }
+    if (pair === 'bomb+bomb') { this.callout('💥 MEGA BOMB!'); await boost(2, [b]); return; }
+    if (pair === 'bomb+lightning') { this.callout('⚡ Charged blast!'); await boost(1, [a, b]); return; }
+    if (pair === 'arrow+bomb' || pair === 'arrow+lightning') {
+      const arrow = ta.special === 'arrow' ? ta : tb;
+      arrow.special = 'cross'; arrow.dir = null;
+      this.callout(pair === 'arrow+bomb' ? '✚💣 Cross blast!' : '✚⚡ Storm cross!');
+      await this.explodeSeeds([a, b]);
+      return;
+    }
+    await super.resolveMerge(a, b, ta, tb); // arrow+arrow cross, dynamite pairs = sum of parts
   }
 
   damageBox(r, c, t) {
@@ -1610,6 +1765,12 @@ function useCellSize(cols, rows) {
   return s;
 }
 
+// Parent of an upgrade pick, derived from its gate flag — data-driven, no
+// per-card hardcoding (UI pass, Omri 2026-09-01).
+function parentOf(def) {
+  return def.requiresBoost ? 'boost' : def.requiresSquare ? 'square' : def.requiresChomper ? 'chomper' : null;
+}
+
 function buildChips(G) {
   const chips = [], byKey = new Map();
   for (const p of G.run.picks) {
@@ -1618,7 +1779,15 @@ function buildChips(G) {
     if (byKey.has(k)) byKey.get(k).count++;
     else { const ch = { key: k, def, pick: p, count: 1 }; byKey.set(k, ch); chips.push(ch); }
   }
-  return chips;
+  // upgrades sit directly after their parent (stable otherwise)
+  const grouped = [];
+  for (const ch of chips) {
+    if (parentOf(ch.def)) continue;
+    grouped.push(ch);
+    for (const up of chips) if (parentOf(up.def) === ch.def.id) grouped.push(up);
+  }
+  for (const ch of chips) if (parentOf(ch.def) && !grouped.includes(ch)) grouped.push(ch); // orphans (cheat picks)
+  return grouped;
 }
 
 function Toggle({ G }) {
@@ -2055,10 +2224,50 @@ function BoardScreen({ G }) {
           location.reload();
         }}>🗑️ Reset progress (fresh save)</button>
       </div>
-      <${StatsPanel} />
+
     </details>
     ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} />` : null}
     ${ui.mode === 'bossoffer' ? h`<${BossOfferPanel} world=${world} onFight=${() => startRun(true)} onFlee=${close} />` : null}
+  </div>`;
+}
+
+// Player-facing menu is just logo + CTA; seed/toggles/stats live in a
+// collapsed DEV drawer (CD, 2026-08-31 — match-quest dev-drawer pattern).
+function MenuScreen({ G }) {
+  const [seed, setSeed] = React.useState(() => String(1 + Math.floor(Math.random() * 999999999)));
+  const [dev, setDev] = React.useState(false);
+  return h`<div className="screen menu">
+    ${SKIN.has('logo')
+      ? h`<img className="menu-logo" src=${SKIN.url('logo')} alt="Match-3 Roguelite — Ascent" />`
+      : h`<h1>🏔️ Match-3 Roguelite — Ascent</h1>`}
+    <p className="sub">One board, one climb. Clear ${CONFIG.CHECKPOINTS.length} goals — each pays moves and a spell draft — then chase a high score until your moves run out.</p>
+    <button className="primary menu-start" onClick=${() => G.newRun(parseInt(seed, 10) || 1)}>Play level</button>
+    <${BlockerToggles} G=${G} />
+    <button className="devtoggle" onClick=${() => setDev(!dev)}>🛠 dev ${dev ? '▲' : '▼'}</button>
+    ${dev ? h`<div className="dev-drawer">
+      <label className="dev-seed">Seed <input value=${seed} onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
+      <${Toggle} G=${G} />
+      <${ColourToggle} G=${G} />
+      <${StatsPanel} />
+    </div>` : null}
+    <div className="end-art menu-art">${SKIN.has('menu.art')
+      ? h`<img className="skin-img" src=${SKIN.url('menu.art')} alt="" />`
+      : h`<span className="end-art-label">menu.art</span>`}</div>
+  </div>`;
+}
+// (MenuScreen is kept for main-parity only — the board hub is the menu here.)
+
+// v20: pre-run per-blocker toggles (visible on the menu, not the 🧪 panel).
+function BlockerToggles({ G }) {
+  const [, bump] = React.useReducer(x => x + 1, 0);
+  const B = [['box', '📦', 'Boxes'], ['water', '💧', 'Water'], ['safe', '🔒', 'Safes']];
+  return h`<div className="blocker-toggles">
+    <span className="blocker-toggles-label">Blockers</span>
+    ${B.map(([k, icon, name]) => h`<button key=${k}
+      className=${'toggle blocker-toggle' + (G.opts.blockers[k] ? ' on' : '')}
+      onClick=${() => { G.opts.blockers[k] = !G.opts.blockers[k]; bump(); G.render(); }}>
+      ${icon} ${name} <b>${G.opts.blockers[k] ? 'ON' : 'off'}</b>
+    </button>`)}
   </div>`;
 }
 
@@ -2070,13 +2279,16 @@ function ColorDot({ color }) {
 // + description to the right, cluster tag as a ribbon off the right edge.
 function DraftCard({ G, o, i }) {
   const def = POWERUPS[o.id];
-  return h`<button className="card" onClick=${() => G.pickOffer(i)}>
+  const parent = parentOf(def); // data-driven from the requires* gate
+  return h`<button className=${'card cl-' + def.cluster + (def.tier === 3 ? ' legendary-card' : '')} onClick=${() => G.pickOffer(i)}>
     <div className="card-icon">${puIcon(o.id)}${o.color !== undefined ? h`<${ColorDot} color=${o.color} />` : null}</div>
     <div className="card-main">
       <div className="card-name">${def.name}${o.color !== undefined ? ` — ${COLOR_NAMES[o.color]}` : ''}</div>
+      ${parent ? h`<div className="card-parent"><span className="card-parent-ic">${puIcon(parent)}</span> ↑ ${POWERUPS[parent].name}</div>` : null}
       <div className="card-desc">${def.desc(o)}</div>
     </div>
     <div className=${'card-tag ' + def.cluster}>${def.cluster}</div>
+    ${def.tier === 2 ? h`<div className="card-tier t2" title="Deeper unlock">★</div>` : null}
     ${def.tier === 3 ? h`<div className="card-tag legendary">⭐ legendary</div>` : null}
   </button>`;
 }
@@ -2372,7 +2584,9 @@ function LevelScreen({ G }) {
     ${G.phase === 'checkpoint' && cp ? h`<div className="overlay">
       <div className="panel goal-panel">
         <h2>🚩 Goal ${cp.n} cleared!${cp.crossed > 1 ? ` (×${cp.crossed} in one move!)` : ''}</h2>
-        <p>+${cp.moves} moves</p>
+        <p className="carryline"><b>${cp.kept}</b> moves kept + <b>${cp.moves}</b> bonus = <b>${cp.total}</b>/${CONFIG.MAX_MOVES} 👟</p>
+        <p className="carrysub">Leftover moves always carry over.</p>
+        ${cp.final ? h`<p>Final goal cleared — the endless chase begins 🔥</p>` : null}
         <button className="primary" onClick=${() => G.continueRun()}>Draft a power-up</button>
       </div>
     </div>` : null}
@@ -2444,6 +2658,39 @@ function EndScreen({ G }) {
   </div>`;
 }
 
+// 🧪 Tester panel: force any power-up into the draft. Floating button, all
+// screens; queued picks land in the NEXT draft's first slot (or reroll the
+// current draft on the spot). Forced drafts are flagged in telemetry.
+function TesterPanel({ G }) {
+  const [open, setOpen] = React.useState(false);
+  const [sel, setSel] = React.useState('chomper');
+  const [, bump] = React.useReducer(x => x + 1, 0);
+  const queue = G.forcedOffers || (G.forcedOffers = []);
+  const force = id => {
+    queue.push(id);
+    if (G.phase === 'draft') G.offers = G.makeOffers(); // reroll current draft, consuming the queue
+    bump(); G.render();
+  };
+  const opts = POWERUP_LIST.slice().sort((a, b) => a.name.localeCompare(b.name));
+  return h`<div className="tester">
+    ${open ? h`<div className="tester-body">
+      <div className="tester-title">🧪 Tester tools</div>
+      <div className="tester-row">
+        <select value=${sel} onChange=${e => setSel(e.target.value)}>
+          ${opts.map(d => h`<option key=${d.id} value=${d.id}>${d.icon} ${d.name}${d.disabled ? ' (pool-disabled)' : ''}</option>`)}
+        </select>
+        <button onClick=${() => force(sel)}>Force</button>
+      </div>
+      <div className="tester-row">
+        <button onClick=${() => force('chomper')}>😬 Force Chomper</button>
+        ${queue.length ? h`<button onClick=${() => { queue.length = 0; bump(); }}>Clear queue (${queue.length})</button>` : null}
+      </div>
+      <div className="tester-hint">Lands in the next draft's first slot (bypasses gates). During a draft it rerolls the offers immediately. Forced drafts are excluded-able in telemetry.</div>
+    </div>` : null}
+    <button className="tester-toggle" title="Tester tools" onClick=${() => setOpen(!open)}>🧪</button>
+  </div>`;
+}
+
 function App() {
   const [, force] = React.useReducer(x => x + 1, 0);
   const ref = React.useRef(null);
@@ -2467,6 +2714,8 @@ function App() {
         lap(n = 1) { for (let i = 0; i < n; i++) META.onLap(); G.render(); },
         world(w) { META.state.world = Math.max(1, Math.min(WORLDS.length, w)); META.state.worldLaps = 0; META.state.pos = 0; META.save(); G.render(); },
         resetMeta() { try { localStorage.removeItem(META_KEY); } catch (e) {} location.reload(); },
+        // queue a power-up into the next draft's first slot (🧪 panel parity)
+        forceOffer(id) { (G.forcedOffers = G.forcedOffers || []).push(id); if (G.phase === 'draft') { G.offers = G.makeOffers(); } G.render(); },
       },
     };
   }
@@ -2484,6 +2733,7 @@ function App() {
       ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
       : h`<div className="bg-main bg-main-placeholder"></div>`}
     ${screen}
+    <${TesterPanel} G=${G} />
   </div>`;
 }
 
