@@ -269,7 +269,8 @@ def main():
                                            lambda c=colour: boosted_piece(c))
     dark = ((43, 33, 86), (24, 18, 52))
     for slot, ch in [('special.arrow-h', '↔️'), ('special.arrow-v', '↕️'),
-                     ('special.lightning', '⚡'), ('special.bomb', '💣')]:
+                     ('special.lightning', '⚡'), ('special.bomb', '💣'),
+                     ('special.dynamite', '🧨'), ('special.cross', '✚')]:  # v21 merge combos
         jobs[slot] = (f'specials/{slot.split(".")[1]}.png',
                       lambda s=slot, e=ch: emoji_tile(s, e, bg=dark, border=(255, 255, 255, 170)))
     jobs['tile.chest'] = ('tiles/chest.png',

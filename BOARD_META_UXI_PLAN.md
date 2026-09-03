@@ -66,7 +66,14 @@ Sizes: S < 1h · M = session chunk · L = full session+.
 | **M4 · Motion** | H6 H7 | Parallax hand-off (tint/untint, HUD fade-in), dice fly on Back to board |
 | **M5 · Events** | H11 H12 | Boss-offer card (03), diegetic landings (07) |
 
-## Decision needed first: syncing with `main`
+## Sync with `main` — DONE 2026-09-02 (option 2, Omri OoO)
+
+Merged `origin/main` (v21) into this branch ourselves; resolution rules are
+in the merge commit. Open item for Omri: main's v16/v19 checkpoint eases were
+not applied to worlds 2/3 (they keep the v3 curve). Original options kept below
+for the record.
+
+### (original) Decision needed first: syncing with `main`
 
 `omri/board-meta` is 48 commits behind `main` (v17/v18 balance, blockers
 rework, card identity, PR #28 UXI pass 2). Restructuring the hub BEFORE

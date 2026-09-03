@@ -47,6 +47,8 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `special.arrow-h` `special.arrow-v` | ↔️ / ↕️ overlay | 256×256, rendered AS-IS (never tinted) |
 | `special.lightning` | ⚡ overlay | 256×256, as-is |
 | `special.bomb` | 💣 overlay | 256×256, as-is |
+| `special.dynamite` | 🧨 (2×2 square match) overlay | 256×256, as-is |
+| `special.cross` | ✚ (v21 merge combo) overlay | 256×256, as-is |
 | `tile.chest` | 🎁 tile | 256×256 |
 | `tile.chomper` | 😬 critter tile | 256×256 |
 | `bg.main` | flat dark page | 1170×2532 mystical backdrop |
