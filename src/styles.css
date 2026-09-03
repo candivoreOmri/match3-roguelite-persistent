@@ -1065,3 +1065,31 @@ button.primary.danger { background: linear-gradient(135deg, var(--danger), #b326
 .tester-cur b { min-width: 34px; text-align: center; color: var(--gold); }
 .tester .stats { margin: 0; }
 .tester .stats .toggle { font-size: 11px; }
+
+/* ============================ M2: iso loop ================================ */
+/* the board container becomes a column: loop viewport, then the dice cluster */
+.bboard { position: relative; width: 100%; max-width: none; aspect-ratio: auto; height: auto; margin: 0;
+          display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.mboard { position: relative; width: 100%; height: 400px; overflow: hidden;
+          /* edge fade instead of a hard crop (match-quest pitfall) */
+          -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%);
+                  mask-image: linear-gradient(180deg, transparent 0, #000 26px, #000 calc(100% - 26px), transparent 100%); }
+.tile-layer { position: absolute; left: 0; top: 0; transition: transform .3s cubic-bezier(.3,.1,.3,1); will-change: transform; }
+/* container-less tiles: the art IS the tile */
+.mtile { position: absolute; width: 84px; height: 84px; transform: translate(-50%, -50%); pointer-events: none; background: none; border: none; box-shadow: none; }
+.mtile .tileimg { width: 100%; height: 100%; object-fit: contain; display: block; }
+.mtile .tile-fb { display: block; font-size: 34px; line-height: 84px; text-align: center; text-shadow: 0 3px 6px rgba(0,0,0,.5); }
+.mtile.landed .tileimg { filter: drop-shadow(0 0 14px rgba(255,255,255,.85)); }
+.mtile.boss .tileimg { filter: drop-shadow(0 0 12px rgba(255,90,76,.9)); animation: bossPulse 1.4s infinite; }
+/* count pill attached to the tile TOP (match-quest .amt) */
+.mtile .amt { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); background: rgba(11,14,20,.85);
+              border: 1px solid rgba(255,255,255,.28); border-radius: 9px; padding: 1px 7px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+/* token: shadowless art, above every tile, hops per step */
+.mtoken { position: absolute; z-index: 3000; width: 76px; height: 76px; pointer-events: none;
+          transform: translate(-50%, -78%); display: flex; align-items: center; justify-content: center; }
+.mtoken-in { font-size: 44px; line-height: 1; animation: tokenHop .24s ease-out; filter: none; }
+.mtoken .token-img { width: 76px; height: 76px; }
+/* dice cluster sits UNDER the loop as a compact row (M3 restyles into the CTA stack) */
+.bhub { position: static; transform: none; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 10px 14px; padding: 0 10px; }
+.bdie { width: 46px; height: 46px; font-size: 22px; }
+.bnotes { top: 4%; }

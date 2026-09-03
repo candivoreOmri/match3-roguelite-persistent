@@ -1862,11 +1862,93 @@ function StatsPanel() {
    'menu'). All meta state lives in META (persisted); React state here is
    purely presentational (die face, popups, hop animation, toasts). */
 
-// Position of space i on the loop, in % of the square board container —
-// clockwise from Home at 12 o'clock.
-function spaceXY(i) {
-  const a = (i / CONFIG.BOARD_SPACES) * Math.PI * 2 - Math.PI / 2;
-  return { x: 50 + 43.5 * Math.cos(a), y: 50 + 43.5 * Math.sin(a) };
+/* ============================ ISO LOOP (M2) =================================
+   Ported from match-quest (meta.js 518-658, CD-locked rules): the 20 spaces
+   are laid on an isometric lattice as a closed zigzag — climb×k · top
+   connector · descent×k · bottom connector — validated CLOSED, SIMPLE and
+   with NO 2×2 SLAB (four touching tiles read as a block, not a path), and
+   narrowed to fit the frame width. Tiles are container-less art (the art IS
+   the tile), painter's order z = y, token marches RIGHT→LEFT from the
+   bottom-right tile, and the tile layer (never the tiles) translates to keep
+   the token in view. */
+const ISO_T = 84;                                 // tile art screen size
+const ISO_SX = Math.round(ISO_T * 0.50), ISO_SY = Math.round(ISO_T * 0.26);
+const ISO_DIR = { E: [ISO_SX, -ISO_SY], N: [-ISO_SX, -ISO_SY], W: [-ISO_SX, ISO_SY], S: [ISO_SX, ISO_SY] };
+const LOOP_MOTIFS = [
+  { name: 'plain',  up: 'EN',     down: 'WS' },
+  { name: 'plainB', up: 'NE',     down: 'SW' },
+  { name: 'wave',   up: 'EENN',   down: 'WSWS' },
+  { name: 'waveB',  up: 'ENEN',   down: 'WWSS' },
+  { name: 'big',    up: 'EEENNN', down: 'WSWSWS' },
+  { name: 'step',   up: 'EENNEN', down: 'WSWSWS' },
+  { name: 'twist',  up: 'ENNE',   down: 'WSSW' },
+];
+const LOOP_CONNECTORS = {
+  0: [['EESS', 'WWNN'], ['EESESS', 'WWNWNN'], ['EEESSS', 'WWWNNN'], ['ESESES', 'WNWNWN']],
+  2: [['EES', 'WWN'], ['EEESS', 'WWWNN'], ['ESESE', 'WNWNW']],
+};
+const WORLD_MOTIF = ['plainB', 'twist', 'waveB', 'big', 'step', 'wave']; // per world, square-free at n=20
+function ringMoves(n) {
+  const b = Math.max(2, Math.round(n / 4)), a = (n - 2 * b) / 2;
+  return a >= 2 ? 'E'.repeat(a) + 'N'.repeat(b) + 'W'.repeat(a) + 'S'.repeat(b) : null;
+}
+function loopIsValid(moves) {
+  let i = 0, j = 0;
+  const cells = [[0, 0]], seen = new Set(['0,0']);
+  for (let k = 0; k < moves.length - 1; k++) {
+    const m = moves[k];
+    i += (m === 'E') - (m === 'W'); j += (m === 'N') - (m === 'S');
+    const key = i + ',' + j;
+    if (seen.has(key)) return null;
+    seen.add(key); cells.push([i, j]);
+  }
+  const last = moves[moves.length - 1];
+  if (i + (last === 'E') - (last === 'W') !== 0) return null;
+  if (j + (last === 'N') - (last === 'S') !== 0) return null;
+  for (const [a, b] of cells)
+    if (seen.has((a + 1) + ',' + b) && seen.has(a + ',' + (b + 1)) && seen.has((a + 1) + ',' + (b + 1))) return null;
+  return cells;
+}
+const loopWidth = cells => { const xs = cells.map(([i, j]) => ISO_SX * (i - j)); return Math.max(...xs) - Math.min(...xs) + ISO_T; };
+function buildLoopMoves(n, shapeIdx, maxW) {
+  const pref = WORLD_MOTIF[shapeIdx % WORLD_MOTIF.length];
+  const order = [...LOOP_MOTIFS].sort((a, b) => (b.name === pref) - (a.name === pref));
+  let best = null;
+  for (const mo of order) {
+    for (const [top, bot] of (LOOP_CONNECTORS[n % 4] || [])) {
+      const span = mo.up.length + mo.down.length, rem = n - top.length - bot.length;
+      if (rem <= 0 || rem % span) continue;
+      const k = rem / span;
+      const moves = mo.up.repeat(k) + top + mo.down.repeat(k) + bot;
+      if (moves.length !== n) continue;
+      const cells = loopIsValid(moves);
+      if (!cells) continue;
+      if (loopWidth(cells) <= maxW) return moves;
+      if (!best) best = moves;
+    }
+  }
+  if (best) return best;
+  const ring = ringMoves(n);
+  return (ring && ring.length === n && loopIsValid(ring)) ? ring : null;
+}
+// pts[i] = screen position of space i inside a strip of at least W×viewH
+function isoLoopPositions(n, W, viewH, shapeIdx) {
+  const moves = buildLoopMoves(n, shapeIdx || 0, W - 24);
+  if (!moves) return { pts: Array.from({ length: n }, () => ({ x: W / 2, y: viewH / 2 })), stripW: W, stripH: viewH };
+  let pts = [{ x: 0, y: 0 }];
+  for (let i = 0; i < moves.length - 1; i++) { const [dx, dy] = ISO_DIR[moves[i]]; const p = pts[pts.length - 1]; pts.push({ x: p.x + dx, y: p.y + dy }); }
+  let s0 = 0; // start bottom-right, march leftward (CD)
+  for (let i = 1; i < pts.length; i++) if (pts[i].y > pts[s0].y || (pts[i].y === pts[s0].y && pts[i].x > pts[s0].x)) s0 = i;
+  pts = pts.slice(s0).concat(pts.slice(0, s0));
+  if (pts[1].x > pts[0].x) pts = [pts[0], ...pts.slice(1).reverse()];
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const padX = 22, padY = 46;
+  const stripW = Math.max(W, maxX - minX + ISO_T + padX * 2);
+  const stripH = Math.max(viewH, maxY - minY + ISO_T + padY * 2);
+  const offX = (stripW - (maxX - minX)) / 2;
+  const offY = stripH - padY - ISO_T / 2 - (maxY - minY);
+  return { pts: pts.map(p => ({ x: p.x - minX + offX, y: p.y - minY + offY })), stripW, stripH };
 }
 
 function rollMystery() {
@@ -2030,27 +2112,38 @@ function BossOfferPanel({ world, onFight, onFlee }) {
   </div></div>`;
 }
 
-/* ----- The loop itself: 20 spaces + token, positioned around a circle.
-   hopMs scales the token's glide + bounce with the ×1/×2/×3 speed toggle. */
+/* ----- The loop itself: iso zigzag of tile art + token; the tile layer pans
+   to keep the token in view (translate the layer, never the tiles). */
 function BoardLoop({ pos, hopKey, moving, hopMs }) {
   const world = META.world();
-  const spaces = world.spaces.map((type, i) => {
-    const t = SPACE_TYPES[type];
-    const { x, y } = spaceXY(i);
-    return h`<div key=${i} style=${{ left: x + '%', top: y + '%' }}
-      className=${'bspace ' + t.cls + (i === pos ? ' here' : '')}
-      title=${t.label}>
-      <div className="bspace-in">${type === 'empty' ? ic(`world.${world.id}.icon`, world.icon, 'mspace-img') : ic('mspace.' + type, t.icon, 'mspace-img')}</div>
-    </div>`;
-  });
-  const { x, y } = spaceXY(pos);
+  const ref = React.useRef(null);
+  const [view, setView] = React.useState({ w: 406, h: 400 });
+  React.useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const f = () => setView({ w: el.clientWidth || 406, h: el.clientHeight || 400 });
+    f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f);
+  }, []);
+  const { pts, stripW, stripH } = React.useMemo(
+    () => isoLoopPositions(CONFIG.BOARD_SPACES, view.w, view.h, world.id - 1), [view.w, view.h, world.id]);
+  const pt = pts[pos] || pts[0];
+  // camera: center a narrower strip, else follow the token (x 50% / y 55%)
+  const overX = stripW - view.w, overY = stripH - view.h;
+  const offX = overX <= 0 ? overX / 2 : Math.max(0, Math.min(overX, pt.x - view.w * 0.5));
+  const offY = overY <= 0 ? 0 : Math.max(0, Math.min(overY, pt.y - view.h * 0.55));
   const ease = 'cubic-bezier(.3,.7,.35,1.1)';
-  return h`<div className="bloop">
-    <div className="bring"></div>
-    ${spaces}
-    <div className=${'btoken' + (moving ? ' moving' : '')}
-      style=${{ left: x + '%', top: y + '%', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
-      <div key=${hopKey} className="btoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
+  return h`<div className="mboard" ref=${ref}>
+    <div className="tile-layer" style=${{ width: stripW + 'px', height: stripH + 'px', transform: `translate(${-offX}px, ${-offY}px)` }}>
+      ${world.spaces.map((type, i) => {
+        const t = SPACE_TYPES[type], p = pts[i];
+        return h`<div key=${i} className=${'mtile ' + t.cls + (i === pos ? ' landed' : '')}
+          style=${{ left: p.x + 'px', top: p.y + 'px', zIndex: Math.round(p.y) }} title=${t.label}>
+          ${slotImg('mspace.' + type, 'tileimg') || h`<span className="tile-fb">${type === 'empty' ? world.icon : t.icon}</span>`}
+        </div>`;
+      })}
+      <div className=${'mtoken' + (moving ? ' moving' : '')}
+        style=${{ left: pt.x + 'px', top: pt.y + 'px', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}` }}>
+        <div key=${hopKey} className="mtoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
+      </div>
     </div>
   </div>`;
 }

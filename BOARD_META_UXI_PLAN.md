@@ -102,7 +102,12 @@ syncing makes the later merge much harder. Options:
   (980ms). End screen rides as an overlay over the landed level zone; Back to
   board pans up. Tester tools float bottom-left of the hub zone (M3 moves
   them into the dev drawer).
-- [ ] M2 — iso zigzag loop (reuse `claudeTest/assets/tiles` art)
+- [x] M2 (2026-09-02) — iso zigzag loop: match-quest's lattice algorithm ported
+  (motif climb · connector · descent, validated closed/simple/no-2×2, narrowed to
+  the frame; per-world motif), 84px container-less tile art (match-quest tiles
+  imported as `mspace.*` art — CD-protected by hash), painter's z = y, token
+  marches right→left from the bottom-right tile, tile layer camera-follow, edge
+  fade instead of a hard crop. Dice cluster parked as a row under the loop until M3.
 - [x] H14 dev chrome (2026-09-02) — ONE tester surface: the bottom-right 🧪 panel
   merges the hub <details>, board speed toggle, fast badge and forced-offer panel,
   plus match-quest's cheat console (currency ±, auto-roll/progress board, auto
