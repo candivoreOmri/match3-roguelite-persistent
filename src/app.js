@@ -2387,8 +2387,8 @@ function BoardScreen({ G }) {
           style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
           disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
           <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
+          <b className="dice-n" title="Dice left">${Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</b>
         </button>
-        <span className="dice-count" title="Dice left">${Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</span>
         ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
       </div>
       <div className="cta-wrap">
@@ -2396,7 +2396,7 @@ function BoardScreen({ G }) {
         ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>
             <span>Boss fight</span><span className="cta-pill boss">${ic(`boss.${S.world}`, world.boss.icon)} ${world.boss.name}</span></button>`
         : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>
-            <span>Play run</span><span className="cta-pill">${CONFIG.WORLD_CHECKPOINTS[Math.min(S.world, CONFIG.WORLD_CHECKPOINTS.length) - 1].length} goals</span></button>`}
+            <span>Play run</span></button>`}
         ${(() => { // "Bonus": queued next-run modifiers ride the button's bottom edge (CD)
           const byId = new Map();
           for (const m of S.modifiers) if (RUN_MODIFIERS[m.id]) byId.set(m.id, (byId.get(m.id) || 0) + 1);
@@ -2971,6 +2971,14 @@ function TesterPanel({ G }) {
         <b>${c.get()}</b>
         <button onClick=${() => { c.set(c.get() + c.step); re(); }}>+${c.step}</button>
       </div>`)}
+
+      <div className="tester-sec">Tiles</div>
+      <div className="tester-row">
+        <select value=${SKIN.tileStyle} onChange=${e => { SKIN.setTileStyle(e.target.value); re(); }}>
+          ${SKIN.tileStyles.map(t => h`<option key=${t.id} value=${t.id}>${t.name}</option>`)}
+        </select>
+        <span className="tester-hint">piece art set — folders in <code>src/assets/</code>, listed in <code>tile-styles.json</code></span>
+      </div>
 
       <div className="tester-sec">Save</div>
       <div className="tester-row">

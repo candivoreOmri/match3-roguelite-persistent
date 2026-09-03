@@ -1242,3 +1242,11 @@ button.ghost { background: none; border: 1px solid var(--border-strong); color: 
 .bonus-slot .amt { position: absolute; top: -6px; right: -7px; min-width: 14px; height: 14px; border-radius: 99px; background: var(--gold); color: #3a2b00;
                    font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
 .kit-bar { margin-top: 12px; }
+
+/* ---- CD: dice count sits ON the button over the lower part of the die; button a touch bigger ---- */
+.dice-btn { width: 92px; height: 92px; }
+.dice-btn .dice-ic { position: relative; top: -9px; }
+.dice-btn .dice-n { display: flex; position: absolute; left: 50%; top: 61%; transform: translate(-50%, -50%); margin: 0;
+                    font-size: 28px; color: #fff; min-width: 34px; justify-content: center; }
+.dice-count { display: none; }
+.dice-wrap .dice-badge { left: 74px; }

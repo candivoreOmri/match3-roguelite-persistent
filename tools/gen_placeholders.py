@@ -138,6 +138,51 @@ def boosted_piece(colour):
     img.putalpha(alpha)  # glow never spills outside the piece silhouette
     return img
 
+# ------------------------------------------------ tile styles (tester-switchable)
+TILE_STYLES = [  # id, display name, folder — 'default' is pieces/ (CD art). Omri: add a folder + a row.
+    ('default', 'Default (pieces/)', 'pieces'),
+    ('gems',    'Gems — faceted',    'pieces-gems'),
+    ('orbs',    'Orbs — glossy spheres', 'pieces-orbs'),
+    ('candy',   'Candy — rounded squares', 'pieces-candy'),
+]
+
+def style_piece(style, slot, colour):
+    top, bot = PIECE_GRADS[colour]
+    img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    if style == 'gems':      # faceted gem: octagon body + lighter crown facet + dark girdle
+        body = [(128, 12), (216, 60), (244, 140), (196, 236), (60, 236), (12, 140), (40, 60)]
+        d.polygon(body, fill=bot, outline=(0, 0, 0, 90))
+        d.polygon([(128, 12), (216, 60), (128, 110), (40, 60)], fill=top)
+        d.polygon([(128, 110), (216, 60), (244, 140), (128, 150)], fill=tuple(int(v * .85) for v in top) + (255,))
+        d.polygon([(128, 110), (40, 60), (12, 140), (128, 150)], fill=tuple(int(v * .75) for v in top) + (255,))
+        d.polygon([(128, 40), (150, 62), (128, 74), (106, 62)], fill=(255, 255, 255, 190))
+    elif style == 'orbs':    # glossy sphere
+        sphere = vgrad(256, 256, top, bot)
+        mask = Image.new('L', (256, 256), 0); ImageDraw.Draw(mask).ellipse([14, 14, 242, 242], fill=255)
+        img.paste(sphere, (0, 0), mask)
+        d = ImageDraw.Draw(img)
+        d.ellipse([14, 14, 242, 242], outline=(0, 0, 0, 70), width=3)
+        d.ellipse([60, 34, 150, 96], fill=(255, 255, 255, 120))
+        d.ellipse([90, 180, 190, 226], fill=(0, 0, 0, 40))
+    else:                    # candy: rounded square with a gloss band + soft rim
+        img = rounded(vgrad(256, 256, top, bot), 62)
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle([18, 16, 238, 92], 40, fill=(255, 255, 255, 70))
+        d.rounded_rectangle([2, 2, 253, 253], 62, outline=(0, 0, 0, 60), width=4)
+    return label(img, slot, size=16, alpha=200)
+
+def boosted_from(path):
+    from PIL import ImageEnhance
+    src = Image.open(path).convert('RGBA')
+    rgb, alpha = src.convert('RGB'), src.split()[3]
+    rgb = ImageEnhance.Color(ImageEnhance.Brightness(rgb).enhance(1.30)).enhance(1.15)
+    img = Image.merge('RGBA', (*rgb.split(), alpha))
+    glow = Image.new('RGBA', src.size, (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse([28, -40, src.width - 28, src.height * 0.55], fill=(255, 255, 235, 70))
+    img.alpha_composite(glow); img.putalpha(alpha)
+    return img
+
 # ------------------------------------------------------------- emoji tile
 def emoji_tile(slot, ch, bg=None, border=None, px=150):
     img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
@@ -332,6 +377,13 @@ def main():
     jobs['metaoffer.jackpot'] = ('hub/metaoffer-jackpot.png', lambda: emoji_icon('metaoffer.jackpot', '💰'))
     jobs['icon.shop'] = ('icons/shop.png', lambda: emoji_icon('icon.shop', '🛍️'))
     jobs['ui.dice-button'] = ('ui/dice-button.png', lambda: nine('ui.dice-button', 'dicebtn'))
+    # ---- tile styles: every non-default style gets six pieces + boosted variants ----
+    for sid, _name, sdir in TILE_STYLES:
+        if sid == 'default': continue
+        for colour in PIECE_GRADS:
+            jobs[f'tilestyle.{sid}.{colour}'] = (f'{sdir}/{colour}.png', lambda st=sid, sl=f'{sdir}/{colour}', c=colour: style_piece(st, sl, c))
+        for colour in PIECE_GRADS:  # derived after the base file exists (sorted job order guarantees it)
+            jobs[f'tilestyle.{sid}.{colour}.boosted'] = (f'{sdir}/{colour}-boosted.png', lambda st=sid, sd=sdir, c=colour: boosted_from(os.path.join(A, f'{sd}/{c}.png')))
     for pid, ch in sorted(powerup_icons().items()):
         jobs[f'icon.powerup.{pid}'] = (f'powerups/{pid}.png',
                                        lambda s=f'icon.powerup.{pid}', e=ch: emoji_icon(s, e))
@@ -348,8 +400,12 @@ def main():
         slots[slot] = rel
         ledger.append(f'{sha1(path)}  {rel}')
 
+    real = {k: v for k, v in slots.items() if not k.startswith('tilestyle.')}
+    with open(os.path.join(A, 'tile-styles.json'), 'w') as f:
+        json.dump({'styles': [{'id': i, 'name': n, 'dir': d} for i, n, d in TILE_STYLES]}, f, indent=2)
+        f.write('\n')
     with open(os.path.join(A, 'skin.json'), 'w') as f:
-        json.dump({'slots': slots}, f, indent=2, sort_keys=True)
+        json.dump({'slots': real}, f, indent=2, sort_keys=True)
         f.write('\n')
     with open(LEDGER, 'w') as f:
         f.write('\n'.join(sorted(ledger)) + '\n')

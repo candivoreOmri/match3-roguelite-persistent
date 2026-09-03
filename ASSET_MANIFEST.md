@@ -114,3 +114,24 @@ with data-URI values as `window.__SKIN_INLINE__` (skin.js already reads it).
 | `metaoffer.jackpot` | 💰 | 256×256 |
 | `icon.shop` | 🛍️ top-bar shop button (buys a die) | 256×256 |
 | `ui.dice-button` | round red dice CTA face | 128×128, transparent corners; count + ROLL drawn by the UI |
+
+## Tile styles (tester-switchable piece-art sets, 2026-09-02)
+
+The 🧪 tester panel has a **Tiles** dropdown that swaps the six piece slots (and
+their boosted variants) live. `default` = the `pieces/` art mapped in skin.json.
+Every other style is a folder with `red.png yellow.png green.png blue.png
+purple.png orange.png` (+ `<colour>-boosted.png`), listed in
+`src/assets/tile-styles.json`:
+
+| id | folder | contents |
+| --- | --- | --- |
+| `default` | `pieces/` | CD art (current) |
+| `gems` | `pieces-gems/` | generated faceted-gem placeholders |
+| `orbs` | `pieces-orbs/` | generated glossy-sphere placeholders |
+| `candy` | `pieces-candy/` | generated rounded-square placeholders |
+
+**To add a style (Omri):** create `src/assets/pieces-<id>/` with the 6 (+6
+boosted) PNGs, add a row to `tile-styles.json` (and to `TILE_STYLES` in
+`tools/gen_placeholders.py` if you want placeholders generated), run
+`sh sync.sh`. The choice persists in `localStorage` (`rl_tile_style`), and
+`build.sh` inlines every listed style into the gated bundle.

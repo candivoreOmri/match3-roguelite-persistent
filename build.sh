@@ -53,7 +53,22 @@ for slot, rel in slots.items():
     if os.path.exists(p):
         mime = mimetypes.guess_type(p)[0] or 'image/png'
         out[slot] = 'data:%s;base64,%s' % (mime, base64.b64encode(open(p, 'rb').read()).decode())
-print('window.__SKIN_INLINE__=' + json.dumps({'slots': out}) + ';')
+# tile styles (tester-switchable piece sets): inline every listed style too
+styles, per_style = [], {}
+try:
+    styles = json.load(open(os.path.join(A, 'tile-styles.json')))['styles']
+except Exception:
+    styles = [{'id': 'default', 'name': 'Default (pieces/)', 'dir': 'pieces'}]
+for st in styles:
+    if st['id'] == 'default': continue
+    m = {}
+    for c in ['red', 'yellow', 'green', 'blue', 'purple', 'orange']:
+        for suffix, slot in (('', 'piece.%s' % c), ('-boosted', 'piece.%s.boosted' % c)):
+            fp = os.path.join(A, st['dir'], c + suffix + '.png')
+            if os.path.exists(fp):
+                m[slot] = 'data:image/png;base64,' + base64.b64encode(open(fp, 'rb').read()).decode()
+    per_style[st['id']] = m
+print('window.__SKIN_INLINE__=' + json.dumps({'slots': out, 'tileStyleList': styles, 'tileStyles': per_style}) + ';')
 PY
   echo '</script>'
   for f in "$SRC/skin.js" "$SRC/vendor/react.min.js" "$SRC/vendor/react-dom.min.js" "$SRC/vendor/htm.min.js" "$SRC/shared/engine.js" "$SRC/shared/powerups.js" "$SRC/app.js"; do
