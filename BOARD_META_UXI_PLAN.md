@@ -87,6 +87,26 @@ syncing makes the later merge much harder. Options:
    gameplay-config conflicts (risky for us to arbitrate v16-vs-v18 blocker
    rules; violates "gameplay conflicts are Omri's").
 
+## Status
+
+- [x] M0 (2026-09-02) — hub on tokens, 31 hub art slots + placeholders, popups
+  already on `.overlay`, "Play run" CTA.
+- [x] M1 (2026-09-02) — two-zone surface: persistent 64px TopBar; viewport 868;
+  board zone 740 + seam 128 + level zone 868 inside one `.surface`; camera
+  `translateY(-868)` on any run phase (.95s match-quest ease); hub recedes
+  (translateY 120 + scale .94 + darken) and the backdrop slides/blurs; the
+  level content is PARKED in hub state (board top at the seam top, tinted
+  brightness .25) and slides into its HUD slot as the camera lands — one board
+  element, never rendered twice; before a run exists a decorative DummyBoard
+  peeks instead. HUD/meters/chips/overlays fade in .35s after `.arrived`
+  (980ms). End screen rides as an overlay over the landed level zone; Back to
+  board pans up. Tester tools float bottom-left of the hub zone (M3 moves
+  them into the dev drawer).
+- [ ] M2 — iso zigzag loop (reuse `claudeTest/assets/tiles` art)
+- [ ] M3 — CTA stack (dice above Play run), top-bar world widget, dev drawer
+- [ ] M4 — parallax polish + dice fly
+- [ ] M5 — boss card + diegetic landings
+
 ## Ground rules (carry over)
 
 Shell/UI only (`app.js` UI + `styles.css` + assets); `shared/*` untouched;

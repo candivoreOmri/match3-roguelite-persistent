@@ -2055,6 +2055,32 @@ function BoardLoop({ pos, hopKey, moving, hopMs }) {
   </div>`;
 }
 
+/* ----- Top bar — persistent across both camera states (M1): world · wallet */
+function TopBar() {
+  const S = META.state, world = META.world();
+  return h`<div className="topbar"><div className="bhead">
+    <div className="bworld">${ic(`world.${S.world}.icon`, world.icon)} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
+    <div className="bwallet"><span className="bcoins">${ic('icon.coin', '🪙')} ${S.coins}</span><${ConsumableRow} /></div>
+  </div></div>`;
+}
+
+/* ----- Dummy board — what peeks under the hub before a run exists (M1).
+   Decorative only (never the run board, so the one-render rule holds). */
+function DummyBoard() {
+  const cell = useCellSize(CONFIG.BOARD_COLS, CONFIG.BOARD_ROWS);
+  const [colours] = React.useState(() => Array.from({ length: CONFIG.BOARD_ROWS * CONFIG.BOARD_COLS }, () => Math.floor(Math.random() * 5)));
+  const tiles = colours.map((col, i) => {
+    const r = Math.floor(i / CONFIG.BOARD_COLS), c = i % CONFIG.BOARD_COLS;
+    const art = slotImg('piece.' + SKIN.PIECE_SLOTS[col], 'piece-img');
+    return h`<div key=${i} className="tile" style=${{ transform: `translate(${c * cell}px,${r * cell}px)`, width: cell + 'px', height: cell + 'px' }}>
+      <div className=${'tin bg' + col + (art ? ' skinned' : '')}>${art}</div></div>`;
+  });
+  return h`<div className="board-stack dummy"><div className="board-wrap"
+    style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 96 fill / 20px stretch`, borderWidth: '20px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '6px' } : null}>
+    <div className="board" style=${{ width: CONFIG.BOARD_COLS * cell + 'px', height: CONFIG.BOARD_ROWS * cell + 'px' }}>${tiles}</div>
+  </div></div>`;
+}
+
 /* ----- Board hub screen */
 function BoardScreen({ G }) {
   const S = META.state;
@@ -2171,10 +2197,6 @@ function BoardScreen({ G }) {
   const bossReady = META.bossUnlocked();
 
   return h`<div className="screen board-screen">
-    <div className="bhead">
-      <div className="bworld">${ic(`world.${S.world}.icon`, world.icon)} <b>${world.name}</b><span className="bworld-n">World ${S.world}/${WORLDS.length}</span></div>
-      <div className="bwallet"><span className="bcoins">${ic('icon.coin', '🪙')} ${S.coins}</span><${ConsumableRow} /></div>
-    </div>
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <${RunModChips} mods=${S.modifiers} label="Next run:" />
     <div className="bboard">
@@ -2767,19 +2789,39 @@ function App() {
     };
   }
   const G = ref.current;
-  let screen;
-  if (G.phase === 'menu') screen = h`<${BoardScreen} G=${G} />`; // the board-game hub
-  // Every draft — the run-start one included — renders as an overlay inside
-  // LevelScreen, so the board is always in view while picking.
-  else if (G.phase === 'win' || G.phase === 'loss') screen = h`<${EndScreen} G=${G} />`;
-  else screen = h`<${LevelScreen} G=${G} />`;
-  // Everything lives inside the phone frame; overlays/callouts anchor to it.
-  // Backdrop: CD art via the bg.main slot; CSS mystical placeholder until then.
-  return h`<div className="phone">
+  /* M1 — one vertical surface (match-quest contract): board zone + seam +
+     level zone are ALWAYS rendered; the camera pans between them. Both the
+     hub and the run live in the same world. `arrived` gates the level chrome
+     (HUD, chips, overlays) so they fade in after the pan lands. */
+  const inRun = G.phase !== 'menu';
+  const [arrived, setArrived] = React.useState(false);
+  React.useEffect(() => {
+    if (!inRun) { setArrived(false); return; }
+    const t = setTimeout(() => setArrived(true), 980);
+    return () => clearTimeout(t);
+  }, [inRun]);
+  // peek shift: park the level content so the board's top sits at the zone
+  // top while in the hub (the "one board, slid into place" hand-off)
+  const zoneRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const z = zoneRef.current; if (!z) return;
+    const bw = z.querySelector('.board-wrap');
+    if (bw) z.style.setProperty('--peek-shift', Math.max(0, bw.getBoundingClientRect().top - z.getBoundingClientRect().top + (parseFloat(getComputedStyle(z).getPropertyValue('--peek-shift')) || 0) * (inRun ? 0 : 1)) + 'px');
+  });
+  const ended = G.phase === 'win' || G.phase === 'loss';
+  return h`<div className=${'phone' + (inRun ? ' cam-level' : '') + (arrived ? ' arrived' : '')}>
     ${SKIN.has('bg.main')
       ? h`<img className="bg-main" src=${SKIN.url('bg.main')} alt="" />`
       : h`<div className="bg-main bg-main-placeholder"></div>`}
-    ${screen}
+    <${TopBar} />
+    <div className="viewport"><div className="surface">
+      <div className="zone board-zone"><${BoardScreen} G=${G} /></div>
+      <div className="zone seam"></div>
+      <div className="zone level-zone" ref=${zoneRef}>
+        ${G.board ? h`<${LevelScreen} G=${G} />` : h`<${DummyBoard} />`}
+      </div>
+    </div></div>
+    ${ended ? h`<div className="overlay end-overlay"><${EndScreen} G=${G} /></div>` : null}
     <${TesterPanel} G=${G} />
   </div>`;
 }

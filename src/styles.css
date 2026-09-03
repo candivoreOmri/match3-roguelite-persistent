@@ -992,3 +992,53 @@ button.primary.danger { background: linear-gradient(135deg, var(--danger), #b326
   position: absolute; bottom: 8px; right: 12px;
   font-size: 11px; color: #b9aef0; opacity: .8;
 }
+
+/* ======================= M1: two-zone surface + camera ======================
+   match-quest contract: one vertical surface inside a clipping viewport, both
+   zones always rendered, camera = translateY. Geometry (430x932): top bar 64 ·
+   viewport 868 · board zone 740 · seam 128 · level zone 868 · pan -868. */
+.topbar { position: relative; z-index: 3; height: 64px; padding: 8px 12px 0; }
+.topbar .bhead { max-width: none; }
+.viewport { position: relative; z-index: 2; height: calc(100% - 64px); overflow: hidden; }
+.surface { position: absolute; left: 0; right: 0; top: 0; transition: transform .95s cubic-bezier(.65, .02, .25, 1); }
+.zone { position: relative; width: 100%; }
+.board-zone { height: 740px; transition: transform .95s cubic-bezier(.65, .02, .25, 1), filter .95s; transform-origin: 50% 100%; }
+.seam { height: 128px; }
+.level-zone { height: 868px; }
+.phone.cam-level .surface { transform: translateY(-868px); }
+/* the hub recedes as the camera drops (parallax depth) */
+/* recede stays out of the landed view: zone bottom 740 + 120 < viewport top 868 */
+.phone.cam-level .board-zone { transform: translateY(120px) scale(.94); filter: brightness(.42) saturate(.65); }
+/* the backdrop slides + softens during the pan (one backdrop for both zones) */
+.bg-main { transition: transform .95s cubic-bezier(.65, .02, .25, 1), filter .95s; }
+.phone.cam-level .bg-main { transform: translateY(-120px) scale(1.15); filter: blur(5px) brightness(.72); }
+
+/* zone content: the hub is a fixed-height zone, not a scroller */
+.board-zone .screen { height: 100%; overflow: hidden; justify-content: flex-start; padding-top: 6px; }
+.board-zone .bstart { margin-top: 2px; }
+/* tester tools float at the zone's bottom-left instead of eating zone height */
+.board-zone .tester-tools { position: absolute; left: 12px; bottom: 10px; margin: 0; text-align: left; z-index: 20; }
+.board-zone .tester-tools[open] { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px; max-height: 70%; overflow-y: auto; width: 320px; }
+
+/* level content: parked in the hub state (board top at the zone top, tinted),
+   slides into place and untints as the camera lands */
+.level-zone > .screen, .level-zone > .board-stack.dummy {
+  transition: transform .95s cubic-bezier(.65, .02, .25, 1), filter .95s;
+  /* parked: board top sits at the SEAM top (128px above the zone), so the
+     board peeks through the seam under the CTA stack */
+  transform: translateY(calc(-1 * (var(--peek-shift, 0px) + 128px)));
+  filter: brightness(.25);
+}
+.phone.cam-level .level-zone > .screen, .phone.cam-level .level-zone > .board-stack.dummy { transform: none; filter: none; }
+.level-zone > .board-stack.dummy { position: absolute; left: 12px; right: 12px; top: 0; align-items: center; }
+/* level chrome hides until the pan lands, then fades in (.35s) */
+.level-zone .hud, .level-zone .meters, .level-zone .powerbar, .level-zone .callouts, .level-zone .overlay {
+  opacity: 0; pointer-events: none; transition: opacity .35s, transform .35s;
+}
+.level-zone .hud, .level-zone .meters { transform: translateY(14px); }
+.phone.arrived .level-zone .hud, .phone.arrived .level-zone .meters, .phone.arrived .level-zone .powerbar,
+.phone.arrived .level-zone .callouts, .phone.arrived .level-zone .overlay { opacity: 1; pointer-events: auto; transform: none; }
+.phone.arrived .level-zone .overlay { pointer-events: auto; }
+/* end screen rides as an overlay over the landed level zone */
+.end-overlay { padding: 0; background: rgba(10, 6, 24, .86); align-items: stretch; }
+.end-overlay .screen.end { width: 100%; height: 100%; }
