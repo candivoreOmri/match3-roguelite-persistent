@@ -31,7 +31,6 @@
 61972843178adca50bc9ced0018f3e938589d702  hub/runmod-landmark.png
 62b83096b03c7c950adcb4f94ea261cad91a7137  powerups/landmark.png
 6a6ae20f74e0d5797bfce8d9fd998727abdbc50d  powerups/specialscore.png
-6a8fb465558191653935d2ebcb4d8503a65111a7  specials/dynamite.png
 6bf0570224fbb02f2e14971bafd3dc7063aab420  powerups/converter.png
 6ee330cbcf78e51a35b2f4f1f12ce4b0cbfdec28  hub/boss-1.png
 73d69cb07c53981163ce7174d720240e2ea18e89  hub/world-2.png
@@ -58,7 +57,6 @@ b2c81d95dfbbcb6df738769fb78b9afcacd4103b  icons/lap.png
 b686f01a12c6c5ec3bef7188a2a38685f99ccfb2  hub/token.png
 b7f3bfad4fd137b54ce38d5394127e24a7503030  tiles/blocker-safe.png
 bc6331e1ee8052248d3a8e27885792c93a3e5887  powerups/rowclear.png
-c6a09e7c2be471d4b856feca835bcde99155210c  specials/cross.png
 c6a62e21bd1b947644e7aa14402aaf8e372070de  tiles/blocker-box.png
 cab8f682aff29866d7036bf5463bdd8ffd024f44  markers/food.png
 d330134e9178db4045e93f13817d483c801cbc3f  powerups/bombchance.png
@@ -71,7 +69,6 @@ ebec3d0090e1f1c02acc921bb8a4cf19b2345b93  icons/moves.png
 ee1c7736360999e4684d511a1ab505a3d3da599f  hub/world-1.png
 f29ddf732ed180eeb1bbf98cbafb6c59951eb911  powerups/blast.png
 f584e5dd884a76915c9d8035e4d64777c1814f86  powerups/bomb.png
-f7b1e15c6da704f87a798e4a81f23512f77b5e99  ui/dice-button.png
 f9cc695abb52edc095cc6e9b6c86bc6d8790c0bd  powerups/buffet.png
 facdda5a7d88e6129eef58e27907d590a7c469bc  hub/metaoffer-jackpot.png
 fc3aefe9ebf2ceabb2c0ba12910c03fc7401171f  icons/snowball.png

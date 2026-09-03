@@ -2039,16 +2039,17 @@ function ScratchGame({ onDone }) {
 }
 
 /* ----- Mystery box — tap to open, then the reward pops out */
-function MysteryBox({ reward, onDone }) {
+function MysteryBox({ reward, onDone, G }) {
   const [open, setOpen] = React.useState(false);
   const applied = React.useRef(false);
   const doOpen = () => {
     if (open) return;
     if (!applied.current) {
       applied.current = true;
-      if (reward.kind === 'coins') META.addCoins(reward.coins);
-      else if (reward.kind === 'consumable') META.addConsumable(reward.item);
-      else META.addDice(reward.dice);
+      if (reward.kind === 'coins') { META.addCoins(reward.coins); if (G && G.fly) G.fly({ kind: 'coins', n: reward.coins, icon: ic('icon.coin', '🪙', 'dice-sprite-img'), target: '.tb-coins', delay: 500 }); }
+      else if (reward.kind === 'consumable') { META.addConsumable(reward.item); if (G && G.fly) G.fly({ kind: 'item:' + reward.item, n: 1, icon: ic('consumable.' + reward.item, CONSUMABLES[reward.item].icon, 'dice-sprite-img'), target: `.kit-slot[data-item="${reward.item}"]`, delay: 500 }); }
+      else { META.addDice(reward.dice); if (G && G.fly) G.fly({ kind: 'dice', n: reward.dice, icon: ic('icon.dice', '🎲', 'dice-sprite-img'), target: '.dice-btn', delay: 500 }); }
+      setTimeout(onDone, 900); // reward flies out — the panel closes itself
     }
     setOpen(true);
   };
@@ -2060,12 +2061,12 @@ function MysteryBox({ reward, onDone }) {
             : reward.kind === 'consumable' ? h`<div className="mg-bigicon">${ic('consumable.' + reward.item, CONSUMABLES[reward.item].icon, 'mg-img')}</div><div className="mg-result"><b>${CONSUMABLES[reward.item].name}</b> added to your kit</div>`
             : h`<div className="mg-bigicon">${ic('icon.dice', '🎲', 'mg-img')}</div><div className="mg-result"><b className="gold">+${reward.dice} die</b></div>`}
           </div>
-          <button className="primary" onClick=${onDone}>Collect</button>`}
+          `}
   </div>`;
 }
 
 /* ----- The landing popup — one overlay, body switches on space type */
-function SpaceRevealPopup({ ui, world, onClose }) {
+function SpaceRevealPopup({ ui, world, onClose, G }) {
   const t = SPACE_TYPES[ui.type] || SPACE_TYPES.empty;
   const body = (() => {
     switch (ui.type) {
@@ -2075,7 +2076,7 @@ function SpaceRevealPopup({ ui, world, onClose }) {
         const d = RUN_MODIFIERS[ui.mod];
         return h`<div className="mg-bigicon">${ic('runmod.' + ui.mod, d.icon, 'mg-img')}</div><div className="mg-title">${d.name}</div><p className="mg-desc">${d.desc}</p><p className="mg-sub">Active for your next run only</p><button className="primary" onClick=${onClose}>Nice</button>`;
       }
-      case 'mystery': return h`<${MysteryBox} reward=${ui.reward} onDone=${onClose} />`;
+      case 'mystery': return h`<${MysteryBox} reward=${ui.reward} onDone=${onClose} G=${G} />`;
       case 'minigame_flip': return h`<${CoinFlipGame} onDone=${onClose} />`;
       case 'minigame_scratch': return h`<${ScratchGame} onDone=${onClose} />`;
       case 'metaoffer': { // v11: auto-applied on landing — a net positive needs no decline
@@ -2170,7 +2171,7 @@ function TopBar({ G }) {
         <span className=${'ww-boss' + (ready ? ' ready' : '') + (beaten ? ' beaten' : '')} title=${world.boss.name}>${ic(`boss.${S.world}`, '👹')}</span>
       </div>
     </div>
-    <div className="tb-coins">${ic('icon.coin', '🪙')} <b>${S.coins}</b></div>
+    <div className="tb-coins">${ic('icon.coin', '🪙')} <b>${Math.max(0, S.coins - ((G.pending || {}).coins || 0))}</b></div>
   </div>`;
 }
 
@@ -2191,30 +2192,39 @@ function DummyBoard() {
   </div></div>`;
 }
 
-/* ----- Dice fly (M4, match-quest flyDice): earned dice fly from the frame
-   centre into the dice button as the hub comes back into view — capped at 8
-   sprites, 95ms stagger, each landing bumps the button and ticks the count. */
-function DiceFly({ G, n, onDone }) {
+/* ----- FlyFx (M4, generalised match-quest flyDice): reward icons pop at a
+   source (the token, or the frame centre) and fly into their store — coins to
+   the top-bar pill, dice to the dice button, items to their kit slot. ≤8
+   sprites, 95ms stagger; every landing bumps the target and releases part of
+   the held-back count (G.pending[kind]) so the number ticks up on arrival.
+   Auto-collection: no "Collect" modal for coins / dice / items (CD). */
+function FlyFx({ G, kind, n, icon, target, from, onDone }) {
   const [geo, setGeo] = React.useState(null);
+  const sprites = Math.min(n, 8), per = Math.ceil(n / sprites);
   React.useLayoutEffect(() => {
-    const phone = document.querySelector('.phone'), btn = document.querySelector('.dice-btn');
-    if (!phone || !btn) { onDone(); return; }
-    const p = phone.getBoundingClientRect(), b = btn.getBoundingClientRect();
-    setGeo({ sx: p.width / 2, sy: p.height / 2, tx: b.left - p.left + b.width / 2, ty: b.top - p.top + b.height / 2 });
+    const phone = document.querySelector('.phone'), tgt = document.querySelector(target);
+    if (!phone || !tgt) { G.pending[kind] = Math.max(0, (G.pending[kind] || 0) - n); G.render(); onDone(); return; }
+    const p = phone.getBoundingClientRect(), t = tgt.getBoundingClientRect();
+    const src = (from === 'center' ? null : document.querySelector('.mtoken'));
+    const sr = src ? src.getBoundingClientRect() : null;
+    setGeo({ sx: sr ? sr.left - p.left + sr.width / 2 : p.width / 2, sy: sr ? sr.top - p.top + sr.height * 0.35 : p.height / 2,
+             tx: t.left - p.left + t.width / 2, ty: t.top - p.top + t.height / 2 });
   }, []);
-  const left = React.useRef(Math.min(n, 8));
+  const left = React.useRef(sprites), remain = React.useRef(n); // this flight's still-held amount
   const land = () => {
-    G.flyPending = Math.max(0, (G.flyPending || 0) - Math.ceil(n / Math.min(n, 8)));
-    const btn = document.querySelector('.dice-btn');
-    if (btn) { btn.classList.remove('dicehit'); void btn.offsetWidth; btn.classList.add('dicehit'); }
+    const release = left.current === 1 ? remain.current : Math.min(per, remain.current);
+    remain.current -= release;
+    G.pending[kind] = Math.max(0, (G.pending[kind] || 0) - release);
+    const tgt = document.querySelector(target);
+    if (tgt) { tgt.classList.remove('hit'); void tgt.offsetWidth; tgt.classList.add('hit'); }
+    if (--left.current <= 0) onDone();
     G.render();
-    if (--left.current <= 0) { G.flyPending = 0; G.render(); onDone(); }
   };
   if (!geo) return null;
   return h`<div className="dice-fly">
-    ${Array.from({ length: Math.min(n, 8) }, (_, i) => h`<div key=${i} className="dice-sprite"
+    ${Array.from({ length: sprites }, (_, i) => h`<div key=${i} className="dice-sprite"
       style=${{ '--sx': geo.sx + 'px', '--sy': geo.sy + 'px', '--tx': geo.tx + 'px', '--ty': geo.ty + 'px', animationDelay: (i * 95) + 'ms' }}
-      onAnimationEnd=${land}>${ic('icon.dice', '🎲', 'dice-sprite-img')}</div>`)}
+      onAnimationEnd=${land}>${icon}</div>`)}
   </div>`;
 }
 
@@ -2305,7 +2315,8 @@ function BoardScreen({ G }) {
         const n = randInt(CONFIG.BOARD_COIN_REWARD_MIN, CONFIG.BOARD_COIN_REWARD_MAX);
         META.addCoins(n);
         floatAt(h`+${n} ${ic('icon.coin', '🪙')}`, 'gold');
-        setUi({ mode: 'reveal', type, coins: n });
+        G.fly({ kind: 'coins', n, icon: ic('icon.coin', '🪙', 'dice-sprite-img'), target: '.tb-coins' });
+        setUi({ mode: 'idle' }); // auto-collected — no modal
         break;
       }
       case 'consumable': {
@@ -2313,7 +2324,8 @@ function BoardScreen({ G }) {
         const item = ids[Math.floor(Math.random() * ids.length)];
         META.addConsumable(item);
         floatAt(h`+1 ${ic('consumable.' + item, CONSUMABLES[item].icon)}`);
-        setUi({ mode: 'reveal', type, item });
+        G.fly({ kind: 'item:' + item, n: 1, icon: ic('consumable.' + item, CONSUMABLES[item].icon, 'dice-sprite-img'), target: `.kit-slot[data-item="${item}"]` });
+        setUi({ mode: 'idle' });
         break;
       }
       case 'modifier': {
@@ -2328,7 +2340,9 @@ function BoardScreen({ G }) {
         const offer = world.metaOffers[Math.floor(Math.random() * world.metaOffers.length)];
         META_POWERUPS[offer].apply();
         floatAt(h`${ic('metaoffer.' + offer, META_POWERUPS[offer].icon)} +${CONFIG.JACKPOT_COINS} ${ic('icon.coin', '🪙')}`, 'gold');
-        setUi({ mode: 'reveal', type, offer });
+        G.fly({ kind: 'coins', n: CONFIG.JACKPOT_COINS, icon: ic('icon.coin', '🪙', 'dice-sprite-img'), target: '.tb-coins' });
+        note(`${META_POWERUPS[offer].icon} ${META_POWERUPS[offer].name}!`);
+        setUi({ mode: 'idle' });
         break;
       }
       case 'minigame_flip':
@@ -2354,24 +2368,36 @@ function BoardScreen({ G }) {
         style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
         disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
         <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
-        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : Math.max(0, S.dice - (G.flyPending || 0))}</b>
+        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</b>
         <span className="dice-lbl">${ui.mode === 'rolling' ? '…' : 'ROLL'}</span>
         ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
       </button>
       ${bossReady
         ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>
-            <span>Fight ${world.boss.name}</span><span className="cta-pill boss">BOSS RUN</span></button>`
+            <span>Boss fight</span><span className="cta-pill boss">${ic(`boss.${S.world}`, world.boss.icon)} ${world.boss.name}</span></button>`
         : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>
             <span>Play run</span><span className="cta-pill">${CONFIG.WORLD_CHECKPOINTS[Math.min(S.world, CONFIG.WORLD_CHECKPOINTS.length) - 1].length} goals</span></button>`}
-      <${RunModChips} mods=${S.modifiers} label="Next run" />
-      <div className="cons-row">
-        ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} className=${'cons-slot' + (S.consumables[c.id] ? '' : ' none')} title=${c.name}>
-          ${ic('consumable.' + c.id, c.icon, 'cons-img')}<b className="amt">${S.consumables[c.id] || 0}</b>
-        </span>`)}
+      <div className="kit-bar">
+        ${(() => { // next-run modifiers, grouped with counts (same slot language as items)
+          const byId = new Map();
+          for (const m of S.modifiers) if (RUN_MODIFIERS[m.id]) byId.set(m.id, (byId.get(m.id) || 0) + 1);
+          return byId.size ? h`<div className="kit-group">
+            <span className="kit-label">Next run</span>
+            ${[...byId].map(([id, count]) => { const d = RUN_MODIFIERS[id];
+              return h`<span key=${id} className=${'kit-slot mod' + (d.negative ? ' negative' : '')} title=${`${d.name} — ${d.desc}`}>
+                ${ic('runmod.' + id, d.icon, 'cons-img')}${count > 1 ? h`<b className="amt">×${count}</b>` : null}</span>`; })}
+          </div>` : null;
+        })()}
+        <div className="kit-group">
+          <span className="kit-label">Items</span>
+          ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} data-item=${c.id} className=${'kit-slot' + (S.consumables[c.id] ? '' : ' none')} title=${c.name}>
+            ${ic('consumable.' + c.id, c.icon, 'cons-img')}<b className="amt">${S.consumables[c.id] || 0}</b>
+          </span>`)}
+        </div>
       </div>
       ${S.dice <= 0 && ui.mode === 'idle' ? h`<p className="bhint-dice">Finish runs to earn dice — win for ${CONFIG.DICE_MIN_ON_WIN} + 1 per leftover move, or cross goal ${CONFIG.PARTIAL_CLEAR_CHECKPOINT} for ${CONFIG.DICE_ON_PARTIAL_CLEAR}.</p>` : null}
     </div>
-    ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} />` : null}
+    ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} G=${G} />` : null}
     ${ui.mode === 'bossoffer' ? h`<${BossOfferPanel} world=${world} onFight=${() => startRun(true)} onFlee=${close} />` : null}
   </div>`;
 }
@@ -2993,16 +3019,20 @@ function App() {
     if (bw) z.style.setProperty('--peek-shift', Math.max(0, bw.getBoundingClientRect().top - z.getBoundingClientRect().top + (parseFloat(getComputedStyle(z).getPropertyValue('--peek-shift')) || 0) * (inRun ? 0 : 1)) + 'px');
   });
   const ended = G.phase === 'win' || G.phase === 'loss';
-  // dice fly: when a run ends and we return to the hub with dice earned
-  const [fly, setFly] = React.useState(null);
+  // reward flights (auto-collection): coins -> top-bar pill, dice -> dice
+  // button, items -> kit slot. G.fly() holds the count back (G.pending) and
+  // spawns a FlyFx; the post-run dice flight waits for the pan to land.
+  const [flights, setFlights] = React.useState([]);
+  G.pending = G.pending || {};
+  G.fly = ({ kind, n, icon, target, from, delay = 0 }) => {
+    G.pending[kind] = (G.pending[kind] || 0) + n; G.render();
+    setTimeout(() => setFlights(fs => [...fs, { kind, n, icon, target, from, id: Date.now() + Math.random() }]), delay);
+  };
   const prevPhase = React.useRef(G.phase);
   React.useEffect(() => {
     const was = prevPhase.current; prevPhase.current = G.phase;
-    if (G.phase === 'menu' && (was === 'win' || was === 'loss') && G.runReward && G.runReward.dice > 0) {
-      G.flyPending = G.runReward.dice; G.render();
-      const t = setTimeout(() => setFly({ n: G.runReward.dice, id: Date.now() }), 950); // after the pan lands
-      return () => clearTimeout(t);
-    }
+    if (G.phase === 'menu' && (was === 'win' || was === 'loss') && G.runReward && G.runReward.dice > 0)
+      G.fly({ kind: 'dice', n: G.runReward.dice, icon: ic('icon.dice', '🎲', 'dice-sprite-img'), target: '.dice-btn', from: 'center', delay: 950 });
   }, [G.phase]);
   return h`<div className=${'phone' + (inRun ? ' cam-level' : '') + (arrived ? ' arrived' : '')}>
     ${SKIN.has('bg.main')
@@ -3017,7 +3047,8 @@ function App() {
       </div>
     </div></div>
     ${ended ? h`<div className="overlay end-overlay"><${EndScreen} G=${G} /></div>` : null}
-    ${fly ? h`<${DiceFly} key=${fly.id} G=${G} n=${fly.n} onDone=${() => setFly(null)} />` : null}
+    ${flights.map(f => h`<${FlyFx} key=${f.id} G=${G} kind=${f.kind} n=${f.n} icon=${f.icon} target=${f.target} from=${f.from}
+      onDone=${() => setFlights(fs => fs.filter(x => x.id !== f.id))} />`)}
     <${TesterPanel} G=${G} />
   </div>`;
 }

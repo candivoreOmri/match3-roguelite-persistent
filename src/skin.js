@@ -53,11 +53,13 @@ window.SKIN = SKIN;
    border-image slice 42 (match-quest pattern). Missing slots = CSS chrome. */
 (() => {
   const rules = [];
+  // slice 33% (not a pixel count) so 128px placeholders and 256px CD art both
+  // keep their corners intact; `fill` paints the centre region
   const nine = (sel, slot, px) => {
     if (SKIN.has(slot)) rules.push(
-      `${sel}{border:${px}px solid transparent;border-image:url(${SKIN.url(slot)}) 42 fill / ${px}px stretch;background:none;box-shadow:none;}`);
+      `${sel}{border:${px}px solid transparent;border-image:url(${SKIN.url(slot)}) 33% fill / ${px}px stretch;background:none !important;box-shadow:none;}`);
   };
-  nine('button.primary', 'ui.button-primary', 12);
+  nine('button.primary', 'ui.button-primary', 14);
   nine('.hud, .fillmeter, .panel, .stats-body, .chip-info, .dev-drawer', 'ui.panel', 10);
   nine('.card', 'ui.overlay-card', 12);
   if (SKIN.has('ui.progressbar-track')) rules.push(

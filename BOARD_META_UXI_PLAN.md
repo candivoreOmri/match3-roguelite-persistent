@@ -122,7 +122,14 @@ syncing makes the later merge much harder. Options:
   stagger, button bumps and count ticks per landing); landing tile step
   (sink/bump); reward floats rising from the token (coins, items, modifiers,
   meta offers, LAP). Parallax hand-off itself landed in M1.
-- [ ] M5 — boss card + diegetic landings
+- [x] Auto-collection (CD, 2026-09-02) — coins / dice / items are collected
+  automatically: the reward pops at the token and flies to its store (coins →
+  top-bar pill, dice → dice button, items → kit slot); counts are held back
+  until the sprites land. Only interactive spaces (mystery box, mini-games) and
+  info reveals (modifier, landmark, boss) keep a panel; the mystery box flies its
+  reward and closes itself. Kit bar (Next run modifiers + Items) replaces the
+  loose chip row; 9-slice chrome slices by % so 256px CD art keeps its corners.
+- [ ] M5 — boss card + diegetic landings (the remaining info reveals)
 
 ## Ground rules (carry over)
 
