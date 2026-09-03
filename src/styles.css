@@ -1201,3 +1201,30 @@ button.primary.danger { background: linear-gradient(135deg, var(--danger), #b326
 .rolldie.rolling { animation: dieTumble .28s infinite; }
 /* Play button ~30% smaller box, text untouched */
 .cta-stack .bstart { width: min(92%, 232px); padding: 4px 18px 6px; }
+
+/* ============================ M5: diegetic reveals + boss card ============================ */
+.diegetic { position: absolute; z-index: 4600; transform: translate(-50%, -100%); pointer-events: none; display: flex; align-items: center; justify-content: center; }
+.dg-burst { position: absolute; width: 140px; height: 140px; border-radius: 50%; left: 50%; top: 50%; margin: -70px 0 0 -70px;
+            background: radial-gradient(circle, rgba(255,213,74,.55), rgba(255,213,74,0) 70%); animation: dgBurst .7s ease-out forwards; }
+@keyframes dgBurst { 0% { transform: scale(.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+.dg-card { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 10px; border-radius: 16px;
+           background: rgba(18, 12, 38, .94); border: 1px solid var(--gold); box-shadow: 0 8px 24px rgba(0,0,0,.5), 0 0 22px rgba(255,213,74,.25);
+           animation: dgIn .35s cubic-bezier(.2,1.6,.4,1), dgOut .3s ease-in 1.35s forwards; max-width: 250px; }
+@keyframes dgIn { from { transform: scale(.5) translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes dgOut { to { transform: translateY(-16px); opacity: 0; } }
+.dg-ic { font-size: 30px; line-height: 1; } .dg-img { width: 40px; height: 40px; }
+.dg-title { font-family: var(--font-display); font-size: 20px; color: #fff; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: var(--title-outline); line-height: 1.1; }
+.dg-sub { font-size: 11px; color: var(--text-dim); line-height: 1.3; }
+/* boss card (frame 03): hero art, name, one line, handicaps as slots, fight / not yet */
+.bosscard { min-width: 290px; max-width: 340px; gap: 10px; }
+.boss-hero { font-size: 72px; line-height: 1; filter: drop-shadow(0 6px 14px rgba(255,90,76,.55)); animation: spawn .4s cubic-bezier(.2,1.6,.4,1); }
+.boss-img { width: 120px; height: 120px; }
+.boss-title { margin: 0; font-size: 30px; }
+.boss-line { font-size: 13px; color: var(--text-dim); } .boss-line b { color: var(--gold); }
+.boss-mods-row { display: flex; gap: 12px; justify-content: center; }
+.kit-slot.big { width: auto; height: auto; flex-direction: column; gap: 4px; padding: 8px 12px; font-size: 26px; }
+.kit-slot.big .cons-img { width: 34px; height: 34px; }
+.kit-cap { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #ffb3ac; }
+.mg-buttons { display: flex; gap: 10px; align-items: center; }
+.mg-buttons .primary { font-size: 30px; padding: 8px 26px; }
+button.ghost { background: none; border: 1px solid var(--border-strong); color: var(--text-dim); font-size: 14px; padding: 10px 16px; }

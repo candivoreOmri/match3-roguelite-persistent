@@ -2095,27 +2095,26 @@ function SpaceRevealPopup({ ui, world, onClose, G }) {
 
 /* ----- Boss offer / pre-run announcement — landing on the boss space */
 function BossOfferPanel({ world, onFight, onFlee }) {
-  return h`<div className="overlay"><div className="panel spacepanel sp-boss">
-    <div className="sp-label">BOSS</div>
-    <div className="mg-bigicon boss-icon">${ic(`boss.${world.id}`, world.boss.icon, 'mg-img')}</div>
-    <div className="mg-title">${world.boss.name}</div>
-    <p className="mg-desc">World ${world.id} boss run — reach the final flag to clear it and advance to the next world.</p>
-    <div className="boss-mods">
-      ${world.boss.modifiers.map(id => {
-        const d = RUN_MODIFIERS[id];
-        return h`<div key=${id} className="boss-mod">${d.icon} <b>${d.name}</b> — ${d.desc.replace('BOSS: ', '')}</div>`;
-      })}
+  const goals = CONFIG.WORLD_BOSS_CHECKPOINTS[Math.min(world.id, CONFIG.WORLD_BOSS_CHECKPOINTS.length) - 1].length;
+  return h`<div className="overlay"><div className="panel spacepanel sp-boss bosscard">
+    <div className="sp-label">Boss run · World ${world.id}</div>
+    <div className="boss-hero">${ic(`boss.${world.id}`, world.boss.icon, 'boss-img')}</div>
+    <div className="draft-title boss-title">${world.boss.name}</div>
+    <div className="boss-line">Clear all <b>${goals}</b> goals to beat the boss and open the next world.</div>
+    <div className="boss-mods-row">
+      ${world.boss.modifiers.map(id => { const d = RUN_MODIFIERS[id];
+        return h`<div key=${id} className="kit-slot mod negative big" title=${d.desc}>${ic('runmod.' + id, d.icon, 'cons-img')}<span className="kit-cap">${d.name}</span></div>`; })}
     </div>
     <div className="mg-buttons">
-      <button className="primary danger" onClick=${onFight}>⚔️ Fight!</button>
-      <button onClick=${onFlee}>Not yet</button>
+      <button className="primary danger" onClick=${onFight}>Fight!</button>
+      <button className="ghost" onClick=${onFlee}>Not yet</button>
     </div>
   </div></div>`;
 }
 
 /* ----- The loop itself: iso zigzag of tile art + token; the tile layer pans
    to keep the token in view (translate the layer, never the tiles). */
-function BoardLoop({ pos, hopKey, moving, hopMs, flt, die }) {
+function BoardLoop({ pos, hopKey, moving, hopMs, flt, die, reveal }) {
   const world = META.world();
   const ref = React.useRef(null);
   const [view, setView] = React.useState({ w: 406, h: 400 });
@@ -2147,8 +2146,15 @@ function BoardLoop({ pos, hopKey, moving, hopMs, flt, die }) {
         <div key=${hopKey} className="mtoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
       </div>
       ${flt ? h`<div key=${flt.key} className=${'mfloat ' + (flt.cls || '')} style=${{ left: pt.x + 'px', top: (pt.y - 70) + 'px' }}>${flt.text}</div>` : null}
+      ${reveal ? h`<div key=${reveal.key} className="diegetic" style=${{ left: Math.min(Math.max(pt.x + offX, 132), view.w - 132) - offX + 'px', top: (pt.y - 96) + 'px' }}>
+        <div className="dg-burst"></div>
+        <div className="dg-card">
+          <div className="dg-ic">${reveal.icon}</div>
+          <div className="dg-text"><div className="dg-title">${reveal.title}</div>${reveal.sub ? h`<div className="dg-sub">${reveal.sub}</div>` : null}</div>
+        </div>
+      </div>` : null}
       ${die ? h`<div className=${'rolldie' + (die.rolling ? ' rolling' : '') + (SKIN.has('die') ? ' skinned' : '')}
-        style=${{ left: pt.x + 'px', top: (pt.y - 118) + 'px', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}`,
+        style=${{ left: pt.x + 'px', top: (pt.y - 96) + 'px', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}`,
                   animationDuration: die.ms + 'ms', ...(SKIN.has('die') ? { backgroundImage: `url(${SKIN.url('die')})` } : null) }}>${die.face}</div>` : null}
     </div>
   </div>`;
@@ -2240,6 +2246,8 @@ function BoardScreen({ G }) {
   const [hopKey, setHopKey] = React.useState(0);
   const [notes, setNotes] = React.useState([]);
   const [flt, setFlt] = React.useState(null); // reward float at the token (M4)
+  const [reveal, setReveal] = React.useState(null); // diegetic in-world reveal (M5)
+  const revealKey = React.useRef(1);
   const fltKey = React.useRef(1);
   const [seed, setSeed] = React.useState('');
   const noteId = React.useRef(1);
@@ -2258,6 +2266,13 @@ function BoardScreen({ G }) {
   };
 
   const floatAt = (text, cls = '') => { const key = fltKey.current++; setFlt({ key, text, cls }); later(() => setFlt(f => (f && f.key === key ? null : f)), 1100); };
+  // M5 (frame 07): the landing reveals itself IN THE WORLD at the token — a
+  // card + burst, input locked briefly — instead of a centered modal
+  const revealAt = (icon, title, sub, ms = 1700) => {
+    const key = revealKey.current++;
+    setReveal({ key, icon, title, sub }); setUi({ mode: 'diegetic' });
+    later(() => { setReveal(r => (r && r.key === key ? null : r)); setUi({ mode: 'idle' }); G.render(); }, ms);
+  };
   const note = (text, cls = '') => {
     const id = noteId.current++;
     setNotes(n => [...n, { id, text, cls }]);
@@ -2334,8 +2349,7 @@ function BoardScreen({ G }) {
       case 'modifier': {
         const id = world.modifierPool[Math.floor(Math.random() * world.modifierPool.length)];
         META.addModifier(id);
-        floatAt(h`${ic('runmod.' + id, RUN_MODIFIERS[id].icon)} ${RUN_MODIFIERS[id].name}`);
-        setUi({ mode: 'reveal', type, mod: id });
+        revealAt(ic('runmod.' + id, RUN_MODIFIERS[id].icon, 'dg-img'), RUN_MODIFIERS[id].name, RUN_MODIFIERS[id].desc + ' · next run');
         break;
       }
       case 'mystery': setUi({ mode: 'reveal', type, reward: rollMystery() }); break;
@@ -2350,7 +2364,7 @@ function BoardScreen({ G }) {
       }
       case 'minigame_flip':
       case 'minigame_scratch':
-      case 'landmark': setUi({ mode: 'reveal', type }); break;
+      case 'landmark': revealAt(ic('mspace.landmark', '🏠', 'dg-img'), 'Home!', `+${CONFIG.LANDMARK_MOVE_BONUS} starting move banked`); break;
       default: setUi({ mode: 'idle' }); // empty space — dead beat, nothing happens (v11: flavour cut)
     }
   };
@@ -2363,7 +2377,7 @@ function BoardScreen({ G }) {
   return h`<div className="screen board-screen">
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <div className="bboard">
-      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} flt=${flt}
+      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} flt=${flt} reveal=${reveal}
         die=${ui.mode === 'rolling' || ui.mode === 'moving' ? { face, rolling: ui.mode === 'rolling', ms: spd(280) } : null} />
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
     </div>

@@ -129,7 +129,14 @@ syncing makes the later merge much harder. Options:
   info reveals (modifier, landmark, boss) keep a panel; the mystery box flies its
   reward and closes itself. Kit bar (Next run modifiers + Items) replaces the
   loose chip row; 9-slice chrome slices by % so 256px CD art keeps its corners.
-- [ ] M5 — boss card + diegetic landings (the remaining info reveals)
+- [x] M5 (2026-09-02) — diegetic landings: modifier and Home reveals are an
+  in-world card + burst at the token (input locked ~1.7s, card clamped into the
+  loop viewport), no centered modal; boss offer restyled as the frame-03 card
+  (hero art, name, one-line goal count, handicaps as slots, Fight! / Not yet).
+  Remaining modals are interactive only (mystery box, mini-games).
+
+All planned phases M0–M5 are done; the hub matches the match-quest surface
+contract. Next: CD redlines + art waves (token, dice, tiles, boss art, UI chrome).
 
 ## Ground rules (carry over)
 

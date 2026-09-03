@@ -215,6 +215,9 @@ def nine(slot, kind):
         d = ImageDraw.Draw(img)
         d.ellipse([2, 2, 125, 125], fill=(200, 16, 46, 255), outline=(255, 179, 179, 255), width=4)
         d.ellipse([22, 14, 96, 70], fill=(255, 122, 122, 110))
+    elif kind == 'die':  # blank white die face; the UI draws the number on top
+        img = rounded(vgrad(128, 128, (245, 247, 255), (201, 206, 222)), 30)
+        ImageDraw.Draw(img).rounded_rectangle([1, 1, 126, 126], 30, outline=(150, 156, 180, 255), width=3)
     return img
 
 def pill(kind):

@@ -18,10 +18,10 @@
 2f39b4f85977b4cf5f0d679a0c0b24db09499649  powerups/spicytrail.png
 2f6e5baa1cb710b2920cecfa86a24c6f8ec69f97  markers/triple.png
 337983d2a5285e6d04311b0ad61217f9096c5122  markers/pinata.png
+34f98c61e9e10f619cc1881f2be73fc971dfd599  hub/die.png
 37b1af800a09970ced1c3662fd5c9da39ebf0416  hub/boss-3.png
 38687d00b4d03bda053b1bfdef1a7022f65a7d90  hub/boss-2.png
 3b11df54306b0a7bc830d8cdcd8ccaba68a5b5ee  icons/fillup.png
-3fb5207925b15471f0bd192c47d8d2bb64c43b84  hub/die.png
 3ff7a45224ef909587ed2e73df4128bb341df310  powerups/snowcrush.png
 4053ae4f1d0ec2e12c69b5b1aa6303c21682ddae  hub/consumable-hammer.png
 4eabbf67074e6228df26a825d62826dc2ff471e0  powerups/lifesaver.png
@@ -54,7 +54,6 @@ ab61fbb9a0849bfbf525ff1337cd09658f5b8e82  hub/runmod-startspecial.png
 abfe8b01d5afde4a027f883f3f535dbe8599569a  ui/panel.png
 af5296402529bc533ff5530abfa58c9021187262  hub/world-3.png
 b2c81d95dfbbcb6df738769fb78b9afcacd4103b  icons/lap.png
-b686f01a12c6c5ec3bef7188a2a38685f99ccfb2  hub/token.png
 b7f3bfad4fd137b54ce38d5394127e24a7503030  tiles/blocker-safe.png
 bc6331e1ee8052248d3a8e27885792c93a3e5887  powerups/rowclear.png
 c6a62e21bd1b947644e7aa14402aaf8e372070de  tiles/blocker-box.png
