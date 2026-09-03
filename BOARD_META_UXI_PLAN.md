@@ -103,7 +103,11 @@ syncing makes the later merge much harder. Options:
   board pans up. Tester tools float bottom-left of the hub zone (M3 moves
   them into the dev drawer).
 - [ ] M2 — iso zigzag loop (reuse `claudeTest/assets/tiles` art)
-- [ ] M3 — CTA stack (dice above Play run), top-bar world widget, dev drawer
+- [x] H14 dev chrome (2026-09-02) — ONE tester surface: the bottom-right 🧪 panel
+  merges the hub <details>, board speed toggle, fast badge and forced-offer panel,
+  plus match-quest's cheat console (currency ±, auto-roll/progress board, auto
+  win/lose run, run/hub status line, seed + new run, world skip, reset).
+- [ ] M3 — CTA stack (dice above Play run), top-bar world widget
 - [ ] M4 — parallax polish + dice fly
 - [ ] M5 — boss card + diegetic landings
 

@@ -2195,12 +2195,13 @@ function BoardScreen({ G }) {
 
   const close = () => { setUi({ mode: 'idle' }); G.render(); };
   const bossReady = META.bossUnlocked();
+  // tester panel hooks (one 🧪 button drives everything — CD, 2026-09-02)
+  G.hub = { roll, cycleSpeed, speed, busy, startRun, setSeed, seed };
 
   return h`<div className="screen board-screen">
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <${RunModChips} mods=${S.modifiers} label="Next run:" />
     <div className="bboard">
-      <button className="bspeed" title="Board animation speed" onClick=${cycleSpeed}>⏩ ×${speed()}</button>
       <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} />
       <div className="bhub">
         <div className="bdice-count">${ic('icon.dice', '🎲')} <b>${S.dice}</b></div>
@@ -2224,32 +2225,6 @@ function BoardScreen({ G }) {
     ${bossReady
       ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>⚔️ Fight ${world.boss.name}</button>`
       : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>Play run</button>`}
-    <details className="tester-tools">
-      <summary>🧪 Tester tools</summary>
-      <div className="menu-box">
-        <label>Seed <input value=${seed} placeholder="random" onChange=${e => setSeed(e.target.value)} inputMode="numeric" /></label>
-        <${Toggle} G=${G} />
-        <${ColourToggle} G=${G} />
-        <div className="tt-worlds">
-          <span className="tt-label">Skip to world</span>
-          ${WORLDS.map(w => h`<button key=${w.id}
-            className=${'tt-world' + (S.world === w.id ? ' active' : '')}
-            disabled=${busy || S.world === w.id}
-            title=${`${w.name} — resets laps + board position, unlocks batch ${w.id}`}
-            onClick=${() => {
-              S.world = w.id; S.worldLaps = 0; S.pos = 0; META.save();
-              note(`🧪 Skipped to world ${w.id} — ${w.name}`);
-              G.render();
-            }}>${w.icon} ${w.id}</button>`)}
-        </div>
-        <button className="tt-reset" onClick=${() => {
-          if (!confirm('Reset ALL board progress? Laps, dice, coins, items, world — everything starts fresh.')) return;
-          try { localStorage.removeItem(META_KEY); } catch (e) {}
-          location.reload();
-        }}>🗑️ Reset progress (fresh save)</button>
-      </div>
-
-    </details>
     ${ui.mode === 'reveal' ? h`<${SpaceRevealPopup} ui=${ui} world=${world} onClose=${close} />` : null}
     ${ui.mode === 'bossoffer' ? h`<${BossOfferPanel} world=${world} onFight=${() => startRun(true)} onFlee=${close} />` : null}
   </div>`;
@@ -2635,8 +2610,6 @@ function LevelScreen({ G }) {
               : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>
           </div>
         </div>
-        ${G.fast ? h`<button className="fastbadge" title="Animations off (test mode) — tap to restore"
-          onClick=${() => { G.fast = false; G.render(); }}>⏩</button>` : null}
       </div>
       <div className=${'board-wrap' + (G.phase === 'level' && G.movesLeft <= 3 && G.movesLeft >= 1 ? ' danger d' + G.movesLeft : '') + (G.armed ? ' aiming' : '')}
         style=${SKIN.has('board.frame') ? { borderImage: `url(${SKIN.url('board.frame')}) 96 fill / 20px stretch`, borderWidth: '20px', borderStyle: 'solid', borderColor: 'transparent', background: 'none', boxShadow: 'none', padding: '6px' } : null}><${Board} G=${G} /></div>
@@ -2731,30 +2704,95 @@ function EndScreen({ G }) {
 // screens; queued picks land in the NEXT draft's first slot (or reroll the
 // current draft on the spot). Forced drafts are flagged in telemetry.
 function TesterPanel({ G }) {
+  /* ONE tester surface (CD, 2026-09-02): merges the hub's <details> tools, the
+     board speed toggle, the in-run fast badge and the forced-offer panel, plus
+     the match-quest cheat console (currency ±, auto-progress board, auto win/
+     lose, run info). Bottom-right 🧪 button; everything else is player UI. */
   const [open, setOpen] = React.useState(false);
   const [sel, setSel] = React.useState('chomper');
   const [, bump] = React.useReducer(x => x + 1, 0);
+  const S = META.state, world = META.world(), hub = G.hub || {};
+  const inRun = G.phase !== 'menu';
+  const re = () => { META.save(); bump(); G.render(); };
   const queue = G.forcedOffers || (G.forcedOffers = []);
-  const force = id => {
-    queue.push(id);
-    if (G.phase === 'draft') G.offers = G.makeOffers(); // reroll current draft, consuming the queue
-    bump(); G.render();
-  };
+  const force = id => { queue.push(id); if (G.phase === 'draft') G.offers = G.makeOffers(); re(); };
   const opts = POWERUP_LIST.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const winRun = () => { // auto-win: cross every remaining goal
+    if (!inRun) return;
+    const cps = G.checkpoints();
+    while (G.run.checkpointIdx < cps.length && (G.phase === 'level' || G.phase === 'checkpoint' || G.phase === 'draft')) {
+      G.score = cps[G.run.checkpointIdx]; G.phase = 'level'; G.checkLevelEnd();
+    }
+    re();
+  };
+  const loseRun = () => { if (!inRun) return; G.phase = 'level'; G.movesLeft = 0; G.checkLevelEnd(); re(); };
+  const cur = [ // match-quest CHEAT_CURRENCIES, mapped onto META
+    { key: 'dice', label: '🎲 Dice', step: 5, get: () => S.dice, set: v => { S.dice = Math.max(0, v); } },
+    { key: 'coins', label: '🪙 Coins', step: 50, get: () => S.coins, set: v => { S.coins = Math.max(0, v); } },
+    ...Object.values(CONSUMABLES).map(c => ({ key: c.id, label: `${c.icon} ${c.name}`, step: 1,
+      get: () => S.consumables[c.id] || 0, set: v => { S.consumables[c.id] = Math.max(0, v); } })),
+  ];
   return h`<div className="tester">
     ${open ? h`<div className="tester-body">
       <div className="tester-title">🧪 Tester tools</div>
+      <div className="tester-status">
+        ${inRun ? `run · goal ${G.run.checkpointIdx + 1}/${G.checkpoints().length} · score ${G.score} · moves ${G.movesLeft} · seed ${G.seed}`
+                : `hub · ${world.name} (w${S.world}) · pos ${S.pos}/${CONFIG.BOARD_SPACES} · lap ${S.laps} · boss ${S.worldLaps}/${world.lapsForBoss}`}
+        <br/>balance v${CONFIG.BALANCE_VERSION} · ${G.fast ? 'FAST anims' : 'normal anims'} · board ×${hub.speed ? hub.speed() : S.boardSpeed || 1}
+      </div>
+
+      <div className="tester-sec">Run</div>
+      <div className="tester-row">
+        <button disabled=${!inRun} onClick=${winRun}>✔ Win run</button>
+        <button disabled=${!inRun} onClick=${loseRun}>✖ Lose run</button>
+        <button disabled=${!inRun} onClick=${() => { RL.cheat.cross(); bump(); }}>🚩 Next goal</button>
+        <button disabled=${!inRun} onClick=${() => { G.movesLeft += 5; re(); }}>👟 +5</button>
+      </div>
       <div className="tester-row">
         <select value=${sel} onChange=${e => setSel(e.target.value)}>
           ${opts.map(d => h`<option key=${d.id} value=${d.id}>${d.icon} ${d.name}${d.disabled ? ' (pool-disabled)' : ''}</option>`)}
         </select>
-        <button onClick=${() => force(sel)}>Force</button>
+        <button onClick=${() => force(sel)}>Force offer</button>
+        ${queue.length ? h`<button onClick=${() => { queue.length = 0; bump(); }}>✕ ${queue.length}</button>` : null}
       </div>
       <div className="tester-row">
-        <button onClick=${() => force('chomper')}>😬 Force Chomper</button>
-        ${queue.length ? h`<button onClick=${() => { queue.length = 0; bump(); }}>Clear queue (${queue.length})</button>` : null}
+        <button className=${G.fast ? 'on' : ''} onClick=${() => { G.fast = !G.fast; re(); }}>⏩ Fast anims ${G.fast ? 'ON' : 'off'}</button>
+        <${Toggle} G=${G} />
+        <${ColourToggle} G=${G} />
       </div>
-      <div className="tester-hint">Lands in the next draft's first slot (bypasses gates). During a draft it rerolls the offers immediately. Forced drafts are excluded-able in telemetry.</div>
+
+      <div className="tester-sec">Board</div>
+      <div className="tester-row">
+        <button disabled=${inRun || hub.busy || S.dice <= 0} onClick=${() => hub.roll && hub.roll()}>🎲 Auto-roll</button>
+        <button disabled=${inRun} onClick=${() => { META.onLap(); re(); }}>🏁 Lap +1</button>
+        <button onClick=${() => { hub.cycleSpeed ? hub.cycleSpeed() : (S.boardSpeed = (S.boardSpeed || 1) >= 3 ? 1 : (S.boardSpeed || 1) + 1); re(); }}>⏩ Board ×${hub.speed ? hub.speed() : S.boardSpeed || 1}</button>
+      </div>
+      <div className="tester-row tt-worlds">
+        <span className="tt-label">World</span>
+        ${WORLDS.map(w => h`<button key=${w.id} className=${'tt-world' + (S.world === w.id ? ' active' : '')} disabled=${inRun || S.world === w.id}
+          onClick=${() => { S.world = w.id; S.worldLaps = 0; S.pos = 0; re(); }}>${w.icon} ${w.id}</button>`)}
+      </div>
+      ${cur.map(c => h`<div key=${c.key} className="tester-row tester-cur">
+        <span className="tester-cur-label">${c.label}</span>
+        <button onClick=${() => { c.set(c.get() - c.step); re(); }}>−${c.step}</button>
+        <b>${c.get()}</b>
+        <button onClick=${() => { c.set(c.get() + c.step); re(); }}>+${c.step}</button>
+      </div>`)}
+
+      <div className="tester-sec">Save</div>
+      <div className="tester-row">
+        <label className="dev-seed">Seed <input value=${hub.seed || ''} placeholder="random" inputMode="numeric"
+          onChange=${e => hub.setSeed && hub.setSeed(e.target.value)} /></label>
+        <button disabled=${inRun} onClick=${() => hub.startRun && hub.startRun(false)}>▶ New run</button>
+      </div>
+      <div className="tester-row">
+        <button className="tt-reset" onClick=${() => {
+          if (!confirm('Reset ALL board progress? Laps, dice, coins, items, world — everything starts fresh.')) return;
+          try { localStorage.removeItem(META_KEY); } catch (e) {}
+          location.reload();
+        }}>🗑️ Reset progress</button>
+        <${StatsPanel} />
+      </div>
     </div>` : null}
     <button className="tester-toggle" title="Tester tools" onClick=${() => setOpen(!open)}>🧪</button>
   </div>`;
