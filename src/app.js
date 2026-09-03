@@ -2391,22 +2391,24 @@ function BoardScreen({ G }) {
         <span className="dice-count" title="Dice left">${Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</span>
         ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
       </div>
+      <div className="cta-wrap">
       ${bossReady
         ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>
             <span>Boss fight</span><span className="cta-pill boss">${ic(`boss.${S.world}`, world.boss.icon)} ${world.boss.name}</span></button>`
         : h`<button className="primary bstart" disabled=${busy} onClick=${() => startRun(false)}>
             <span>Play run</span><span className="cta-pill">${CONFIG.WORLD_CHECKPOINTS[Math.min(S.world, CONFIG.WORLD_CHECKPOINTS.length) - 1].length} goals</span></button>`}
-      <div className="kit-bar">
-        ${(() => { // next-run modifiers, grouped with counts (same slot language as items)
+        ${(() => { // "Bonus": queued next-run modifiers ride the button's bottom edge (CD)
           const byId = new Map();
           for (const m of S.modifiers) if (RUN_MODIFIERS[m.id]) byId.set(m.id, (byId.get(m.id) || 0) + 1);
-          return byId.size ? h`<div className="kit-group">
-            <span className="kit-label">Next run</span>
+          return byId.size ? h`<div className="bonus-strip">
+            <span className="bonus-label">Bonus</span>
             ${[...byId].map(([id, count]) => { const d = RUN_MODIFIERS[id];
-              return h`<span key=${id} className=${'kit-slot mod' + (d.negative ? ' negative' : '')} title=${`${d.name} — ${d.desc}`}>
+              return h`<span key=${id} className=${'bonus-slot' + (d.negative ? ' negative' : '')} title=${`${d.name} — ${d.desc}`}>
                 ${ic('runmod.' + id, d.icon, 'cons-img')}${count > 1 ? h`<b className="amt">×${count}</b>` : null}</span>`; })}
           </div>` : null;
         })()}
+      </div>
+      <div className="kit-bar">
         <div className="kit-group">
           <span className="kit-label">Items</span>
           ${Object.values(CONSUMABLES).map(c => h`<span key=${c.id} data-item=${c.id} className=${'kit-slot' + (S.consumables[c.id] ? '' : ' none')} title=${c.name}>
