@@ -767,7 +767,8 @@ button.primary {
   50% { transform: rotate(12deg) scale(.96) translateY(2px); }
   100% { transform: rotate(-14deg) scale(1.06) translateY(-3px); }
 }
-.broll { padding: 9px 22px; font-size: 15px; }
+/* the ring-centre Roll CTA stays compact (the x2 primary rule is for full-width CTAs) — M3 moves it into the CTA stack */
+.bhub button.primary.broll { padding: 9px 22px; font-size: 20px; }
 .broll:disabled { opacity: .45; cursor: default; box-shadow: none; }
 .bbuy { font-size: 11.5px; padding: 5px 12px; border-radius: 99px; color: var(--gold); border-color: #4a4020; }
 .bbuy:disabled { opacity: .35; cursor: default; }
