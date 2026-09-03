@@ -47,6 +47,8 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `special.arrow-h` `special.arrow-v` | ↔️ / ↕️ overlay | 256×256, rendered AS-IS (never tinted) |
 | `special.lightning` | ⚡ overlay | 256×256, as-is |
 | `special.bomb` | 💣 overlay | 256×256, as-is |
+| `special.dynamite` | 🧨 (2×2 square match) overlay | 256×256, as-is |
+| `special.cross` | ✚ (v21 merge combo) overlay | 256×256, as-is |
 | `tile.chest` | 🎁 tile | 256×256 |
 | `tile.chomper` | 😬 critter tile | 256×256 |
 | `bg.main` | flat dark page | 1170×2532 mystical backdrop |
@@ -63,6 +65,10 @@ Review surface: `http://localhost:<port>/src/assets/styleguide.html` (run `sh sy
 | `marker.xtramove` | 🔄 board mark |
 | `marker.pinata` | 🪅 board mark |
 | `marker.triple` | ×3 board mark |
+| `marker.food` | 🍖 chomper snack (cell overlay) |
+| `tile.blocker.box` | 📦 box blocker (damage states still CSS/badge; single sprite for now) |
+| `tile.blocker.water` | 💧 water blocker |
+| `tile.blocker.safe` | 🔒 colour-safe blocker |
 | `icon.momentum` | 🚀 meter icon |
 | `icon.fillup` | 🔋 meter icon |
 | `icon.snowball` | ❄️ meter icon |
@@ -92,3 +98,41 @@ Colour-bearing power-ups (e.g. `boost`) may add bespoke per-colour files:
 `build.sh` bundles only CSS+JS. Fonts are inlined as data URIs at build time.
 When the first P1 art lands, `build.sh` gains a step that inlines `skin.json`
 with data-URI values as `window.__SKIN_INLINE__` (skin.js already reads it).
+
+## P2 — board hub (board-meta line, added 2026-09-02)
+
+| Slot | Replaces | Spec |
+| --- | --- | --- |
+| `mspace.<type>` (landmark, coin, consumable, modifier, mystery, minigame_flip, minigame_scratch, metaoffer, empty, boss) | emoji on the loop spaces | 256×256 icon (M2 turns spaces into full iso tile art — same slot ids) |
+| `token` | 🧗 | 256×256 |
+| `die` | white CSS die | 128×128 blank die face; the rolled number is drawn on top by the UI |
+| `icon.dice` `icon.coin` `icon.lap` | 🎲 🪙 🏁 (dice count, wallet, lap counter, CTAs) | 256×256 |
+| `world.<n>.icon` (1–3) | 🌿 🏜️ 🏔️ header + empty spaces | 256×256 |
+| `boss.<n>` (1–3) | 🌈 🗿 🐉 boss progress + offer panel | 256×256 |
+| `runmod.<id>` (cpmoves, first2x, startspecial, landmark, boss6, bosscold) | run-modifier chips + reveal popup | 256×256 |
+| `consumable.<id>` (hammer, bomb, shuffle) | wallet + reveal popup | 256×256 |
+| `metaoffer.jackpot` | 💰 | 256×256 |
+| `icon.shop` | 🛍️ top-bar shop button (buys a die) | 256×256 |
+| `icon.backpack` | 🎒 collapsible items button at the Play button's bottom-left | 256×256 |
+| `ui.dice-button` | round red dice CTA face | 128×128, transparent corners; count + ROLL drawn by the UI |
+
+## Tile styles (tester-switchable piece-art sets, 2026-09-02)
+
+The 🧪 tester panel has a **Tiles** dropdown that swaps the six piece slots (and
+their boosted variants) live. `default` = the `pieces/` art mapped in skin.json.
+Every other style is a folder with `red.png yellow.png green.png blue.png
+purple.png orange.png` (+ `<colour>-boosted.png`), listed in
+`src/assets/tile-styles.json`:
+
+| id | folder | contents |
+| --- | --- | --- |
+| `default` | `pieces/` | CD art (current) |
+| `gems` | `pieces-gems/` | generated faceted-gem placeholders |
+| `orbs` | `pieces-orbs/` | generated glossy-sphere placeholders |
+| `candy` | `pieces-candy/` | generated rounded-square placeholders |
+
+**To add a style (Omri):** create `src/assets/pieces-<id>/` with the 6 (+6
+boosted) PNGs, add a row to `tile-styles.json` (and to `TILE_STYLES` in
+`tools/gen_placeholders.py` if you want placeholders generated), run
+`sh sync.sh`. The choice persists in `localStorage` (`rl_tile_style`), and
+`build.sh` inlines every listed style into the gated bundle.

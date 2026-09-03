@@ -3,9 +3,11 @@
 Vanilla JS, no build step, no npm. React UMD + htm are vendored in `src/vendor/`.
 
 This is the **persistent-board variant**: no levels — ONE board per run, one run-long
-bar with cumulative score checkpoints (draft + move grant on crossing; endless chase
-after the final flag). Special cells/chests DRIP in per move (`CONFIG.DRIP`), never
-seeded per level. Telemetry key `rl_persistent_telemetry_v1` (`variant:'persistent'`).
+bar with cumulative score checkpoints (draft + move grant on crossing). Since v10 the
+run ENDS when the final checkpoint is crossed — leftover moves are the prize (1 die
+each), not a springboard for more score. Special cells/chests DRIP in per move
+(`CONFIG.DRIP`), never seeded per level. Telemetry key `rl_persistent_telemetry_v1`
+(`variant:'persistent'`).
 
 ## Running locally
 
@@ -17,9 +19,41 @@ python3 -m http.server 8000
 
 (Anything that serves static files works — the game is plain script tags, no bundler.)
 
-Debug handle in the console: `window.RL = {game, CONFIG, POWERUPS, cheat}`.
+Debug handle in the console: `window.RL = {game, CONFIG, POWERUPS, META, WORLDS, cheat}`.
 Set `RL.game.fast = true` to skip animation delays in scripted tests;
-`RL.cheat.cross()` jumps to the next checkpoint.
+`RL.cheat.cross()` jumps to the next checkpoint. Board-meta cheats:
+`RL.cheat.dice(n)`, `RL.cheat.coins(n)`, `RL.cheat.lap(n)`, `RL.cheat.world(w)`,
+`RL.cheat.resetMeta()`.
+
+## Board meta layer (v9, reworked v11)
+
+Runs are wrapped by a board-game hub (rendered on phase `'menu'`): a circular
+20-space loop the player moves around by spending dice earned from runs
+(win pays 1 + 1 per leftover move, crossing checkpoint 3 pays 1; carried
+between runs, UNCAPPED — `DICE_CAP` is reserved for a future refill
+mechanic; dice can also be bought for `DICE_PRICE_COINS`). Spaces pay
+coins / consumables / one-run modifiers / mini-games (empty spaces do
+nothing — flavour text was cut, and the meta offer auto-applies, no
+accept/decline); each lap banks +1 starting move. After
+`LAPS_TO_UNLOCK_BOSS` laps the boss REPLACES the Start-run button (it is
+not a board space) — its negative modifier is announced before the run,
+and clearing it advances the world. Targets AND move grants are per-world,
+and since v13 regular and boss runs read SEPARATE curves
+(`WORLD_CHECKPOINTS` / `WORLD_BOSS_CHECKPOINTS`, plus `WORLD_START_MOVES`,
+`WORLD_CHECKPOINT_MOVES`) — a regular run's flag count is its curve's
+length (world 1: 3 flags, introductory; its boss climbs 6). Tuning note:
+the greedy bot harness is a decent proxy at 5 colours but near-useless at
+6 (boss runs) — tune bosses by relative bot progress + human telemetry.
+World N auto-unlocks power-up batch N in the draft pool
+(`POWERUP_BATCHES` — data, wrapped over each roster entry's `disabled`;
+batch listing never resurrects a roster-disabled pick).
+Worlds, space layouts, modifiers, and batches are all data tables in
+`src/app.js` — add space types / worlds / modifiers there, never in the
+engine. Meta state persists in localStorage under `rl_persistent_meta_v1`.
+Consumables (hammer 🔨 = smash/detonate one tile, bomb 🧨 = blast an area,
+shuffle 🔀) are usable in-run since v12 via the bar under the board — no
+move cost, inventory persists in META. The power-up unlock/reveal screen
+is still a future feature.
 `window.M3` exposes the engine internals (`G`, `trySwap`, `resolveBoard`, …);
 `trySwap` takes two cell **objects**: `trySwap({r,c},{r,c})`, not 4 numbers.
 
@@ -48,6 +82,8 @@ Set `RL.game.fast = true` to skip animation delays in scripted tests;
   that goes in `src/app.js`. If you change `shared/`, flag it in the PR so the same
   change lands in the sibling repo.
 - Score economy is 1 point per piece; don't hand-tune targets.
-- Reaching a checkpoint never ends a run early — the player always plays on.
+- Intermediate checkpoints never end a run early — but since v10 the FINAL checkpoint
+  DOES end the run (a win), converting leftover moves to dice. Don't reintroduce the
+  endless score chase.
 - The game should feel **juicy**: animation, particles, floating callouts, screen
   shake. Match that bar for any new mechanic or visual change.

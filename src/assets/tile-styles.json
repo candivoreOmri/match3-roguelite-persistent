@@ -1,0 +1,24 @@
+{
+  "styles": [
+    {
+      "id": "default",
+      "name": "Default (pieces/)",
+      "dir": "pieces"
+    },
+    {
+      "id": "gems",
+      "name": "Gems \u2014 faceted",
+      "dir": "pieces-gems"
+    },
+    {
+      "id": "orbs",
+      "name": "Orbs \u2014 glossy spheres",
+      "dir": "pieces-orbs"
+    },
+    {
+      "id": "candy",
+      "name": "Candy \u2014 rounded squares",
+      "dir": "pieces-candy"
+    }
+  ]
+}

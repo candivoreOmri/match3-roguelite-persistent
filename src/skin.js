@@ -34,10 +34,42 @@ const SKIN = (() => {
   const url = id => slots[id] ? (slots[id].startsWith('data:') ? slots[id] : 'assets/' + slots[id] + CB) : null;
   // colour index ↔ manifest colour-slot names (bg0..bg5 in styles.css)
   const PIECE_SLOTS = ['red', 'yellow', 'green', 'blue', 'purple', 'orange'];
-  return {
+  /* ---- tile styles: switchable piece-art sets (tester panel). A style is a
+     folder holding <colour>.png (+ <colour>-boosted.png) for the six colours,
+     listed in assets/tile-styles.json; 'default' = the pieces/ slots as
+     mapped in skin.json. The gated build inlines every style's files under
+     window.__SKIN_INLINE__.tileStyles[id][slot] as data URIs. ---- */
+  const PIECE_SLOTS_ = ['red', 'yellow', 'green', 'blue', 'purple', 'orange'];
+  const baseSlots = {};
+  for (const c of PIECE_SLOTS_) { baseSlots['piece.' + c] = slots['piece.' + c]; baseSlots['piece.' + c + '.boosted'] = slots['piece.' + c + '.boosted']; }
+  let tileStyles = [{ id: 'default', name: 'Default (pieces/)', dir: 'pieces' }];
+  const inline = window.__SKIN_INLINE__ || null;
+  if (inline && inline.tileStyleList) tileStyles = inline.tileStyleList;
+  else if (!inline) {
+    try {
+      const xhr = new XMLHttpRequest(); xhr.open('GET', 'assets/tile-styles.json?cb=' + Date.now(), false); xhr.send(null);
+      if (xhr.status === 200) tileStyles = JSON.parse(xhr.responseText).styles || tileStyles;
+    } catch (e) { /* no styles file — default only */ }
+  }
+  let tileStyle = 'default';
+  const applyTileStyle = id => {
+    const st = tileStyles.find(t => t.id === id) || tileStyles[0];
+    for (const c of PIECE_SLOTS_) {
+      const a = 'piece.' + c, b = a + '.boosted';
+      if (st.id === 'default') { slots[a] = baseSlots[a]; slots[b] = baseSlots[b]; continue; }
+      if (inline && inline.tileStyles && inline.tileStyles[st.id]) { slots[a] = inline.tileStyles[st.id][a]; slots[b] = inline.tileStyles[st.id][b] || inline.tileStyles[st.id][a]; }
+      else { slots[a] = st.dir + '/' + c + '.png'; slots[b] = st.dir + '/' + c + '-boosted.png'; }
+    }
+    tileStyle = st.id;
+  };
+  try { const saved = localStorage.getItem('rl_tile_style'); if (saved) applyTileStyle(saved); } catch (e) {}
+  const api = {
     has: id => !!slots[id],
     url,
     PIECE_SLOTS,
+    get tileStyles() { return tileStyles; },
+    get tileStyle() { return tileStyle; },
+    setTileStyle(id) { applyTileStyle(id); try { localStorage.setItem('rl_tile_style', id); } catch (e) {} },
     // bespoke per-colour slot id, or null — e.g. colored('special.bomb', 0) → 'special.bomb.red'
     colored: (kind, colorIdx) => {
       const id = kind + '.' + PIECE_SLOTS[colorIdx];
@@ -45,6 +77,7 @@ const SKIN = (() => {
     },
     count: Object.keys(slots).length,
   };
+  return api;
 })();
 window.SKIN = SKIN;
 
@@ -53,11 +86,13 @@ window.SKIN = SKIN;
    border-image slice 42 (match-quest pattern). Missing slots = CSS chrome. */
 (() => {
   const rules = [];
+  // slice 33% (not a pixel count) so 128px placeholders and 256px CD art both
+  // keep their corners intact; `fill` paints the centre region
   const nine = (sel, slot, px) => {
     if (SKIN.has(slot)) rules.push(
-      `${sel}{border:${px}px solid transparent;border-image:url(${SKIN.url(slot)}) 42 fill / ${px}px stretch;background:none;box-shadow:none;}`);
+      `${sel}{border:${px}px solid transparent;border-image:url(${SKIN.url(slot)}) 33% fill / ${px}px stretch;background:none !important;box-shadow:none;}`);
   };
-  nine('button.primary', 'ui.button-primary', 12);
+  nine('button.primary', 'ui.button-primary', 14);
   nine('.hud, .fillmeter, .panel, .stats-body, .chip-info, .dev-drawer', 'ui.panel', 10);
   nine('.card', 'ui.overlay-card', 12);
   if (SKIN.has('ui.progressbar-track')) rules.push(
