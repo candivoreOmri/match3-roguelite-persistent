@@ -2115,7 +2115,7 @@ function BossOfferPanel({ world, onFight, onFlee }) {
 
 /* ----- The loop itself: iso zigzag of tile art + token; the tile layer pans
    to keep the token in view (translate the layer, never the tiles). */
-function BoardLoop({ pos, hopKey, moving, hopMs, flt }) {
+function BoardLoop({ pos, hopKey, moving, hopMs, flt, die }) {
   const world = META.world();
   const ref = React.useRef(null);
   const [view, setView] = React.useState({ w: 406, h: 400 });
@@ -2147,6 +2147,9 @@ function BoardLoop({ pos, hopKey, moving, hopMs, flt }) {
         <div key=${hopKey} className="mtoken-in" style=${{ animationDuration: hopMs + 'ms' }}>${ic('token', '🧗', 'token-img')}</div>
       </div>
       ${flt ? h`<div key=${flt.key} className=${'mfloat ' + (flt.cls || '')} style=${{ left: pt.x + 'px', top: (pt.y - 70) + 'px' }}>${flt.text}</div>` : null}
+      ${die ? h`<div className=${'rolldie' + (die.rolling ? ' rolling' : '') + (SKIN.has('die') ? ' skinned' : '')}
+        style=${{ left: pt.x + 'px', top: (pt.y - 118) + 'px', transition: `left ${hopMs}ms ${ease}, top ${hopMs}ms ${ease}`,
+                  animationDuration: die.ms + 'ms', ...(SKIN.has('die') ? { backgroundImage: `url(${SKIN.url('die')})` } : null) }}>${die.face}</div>` : null}
     </div>
   </div>`;
 }
@@ -2360,18 +2363,20 @@ function BoardScreen({ G }) {
   return h`<div className="screen board-screen">
     ${META.campaignDone() ? h`<div className="bdone">👑 All three worlds cleared — the endless climb is yours!</div>` : null}
     <div className="bboard">
-      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} flt=${flt} />
+      <${BoardLoop} pos=${S.pos} hopKey=${hopKey} moving=${ui.mode === 'moving'} hopMs=${spd(240)} flt=${flt}
+        die=${ui.mode === 'rolling' || ui.mode === 'moving' ? { face, rolling: ui.mode === 'rolling', ms: spd(280) } : null} />
       <div className="bnotes">${notes.map(nt => h`<div key=${nt.id} className=${'callout ' + nt.cls}>${nt.text}</div>`)}</div>
     </div>
     <div className="cta-stack">
-      <button className=${'dice-btn' + (ui.mode === 'rolling' ? ' rolling' : '') + (SKIN.has('ui.dice-button') ? ' skinned' : '')}
-        style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
-        disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
-        <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
-        <b className="dice-n">${ui.mode === 'rolling' || ui.mode === 'moving' ? face : Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</b>
-        <span className="dice-lbl">${ui.mode === 'rolling' ? '…' : 'ROLL'}</span>
+      <div className="dice-wrap">
+        <button className=${'dice-btn' + (SKIN.has('ui.dice-button') ? ' skinned' : '')}
+          style=${SKIN.has('ui.dice-button') ? { backgroundImage: `url(${SKIN.url('ui.dice-button')})` } : null}
+          disabled=${busy || S.dice <= 0} onClick=${roll} title=${S.dice > 0 ? 'Roll the die' : 'No dice — finish runs to earn some'}>
+          <span className="dice-ic">${ic('icon.dice', '🎲', 'dice-img')}</span>
+        </button>
+        <span className="dice-count" title="Dice left">${Math.max(0, S.dice - ((G.pending || {}).dice || 0))}</span>
         ${speed() > 1 ? h`<span className="dice-badge">×${speed()}</span>` : null}
-      </button>
+      </div>
       ${bossReady
         ? h`<button className="primary danger bstart" disabled=${busy} onClick=${() => setUi({ mode: 'bossoffer' })}>
             <span>Boss fight</span><span className="cta-pill boss">${ic(`boss.${S.world}`, world.boss.icon)} ${world.boss.name}</span></button>`

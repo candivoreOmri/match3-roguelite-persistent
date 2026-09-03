@@ -1181,3 +1181,23 @@ button.primary.danger { background: linear-gradient(135deg, var(--danger), #b326
 /* auto-collection landings: the store bumps on each arrival */
 .tb-coins.hit, .kit-slot.hit, .dice-btn.hit { animation: dicehit .32s ease-out; }
 .mystery-reveal { min-height: 90px; }
+
+/* ---- CD 2026-09-02: dice count beside the button, rolled die on the board, smaller Play ---- */
+.dice-wrap { position: relative; display: flex; align-items: center; gap: 10px; }
+.dice-btn { width: 78px; height: 78px; }
+.dice-btn .dice-ic .dice-img { width: 40px; height: 40px; }
+.dice-ic { font-size: 34px; }
+.dice-n, .dice-lbl { display: none; }
+.dice-count { font-family: var(--font-display); font-size: 30px; line-height: 1; color: #fff; min-width: 46px; text-align: center;
+              background: rgba(18, 12, 38, .72); border: 1px solid var(--border-strong); border-radius: 14px; padding: 6px 10px;
+              -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: var(--title-outline); }
+.dice-wrap .dice-badge { top: -8px; right: auto; left: 60px; }
+/* the rolled die rides above the token on the board */
+.rolldie { position: absolute; z-index: 4500; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 12px; pointer-events: none;
+           background: linear-gradient(160deg, #f5f7ff, #c9cede); color: var(--ink); font-family: var(--font-display); font-size: 28px;
+           display: flex; align-items: center; justify-content: center;
+           box-shadow: inset 0 -4px 0 rgba(0,0,0,.22), 0 6px 14px rgba(0,0,0,.45); }
+.rolldie.skinned { background: none; box-shadow: none; background-size: 100% 100%; }
+.rolldie.rolling { animation: dieTumble .28s infinite; }
+/* Play button ~30% smaller box, text untouched */
+.cta-stack .bstart { width: min(92%, 232px); padding: 4px 18px 6px; }
