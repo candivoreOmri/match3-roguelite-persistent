@@ -1250,3 +1250,11 @@ button.ghost { background: none; border: 1px solid var(--border-strong); color: 
                     font-size: 28px; color: #fff; min-width: 34px; justify-content: center; }
 .dice-count { display: none; }
 .dice-wrap .dice-badge { left: 74px; }
+
+/* ---- CD: Bonus as a SHELF sliding out from under the Play button (not on top of it) ---- */
+.cta-wrap { flex-direction: column; align-items: center; }
+.cta-wrap .bstart { position: relative; z-index: 2; }
+.bonus-strip { position: static; transform: none; margin-top: -10px; padding: 14px 14px 6px 12px; z-index: 1;
+               border-radius: 0 0 16px 16px; border: 1px solid var(--accent); border-top: none;
+               background: linear-gradient(180deg, rgba(60, 38, 110, .98), rgba(24, 16, 48, .96));
+               box-shadow: 0 6px 14px rgba(0, 0, 0, .45), inset 0 3px 6px rgba(0, 0, 0, .35); }
