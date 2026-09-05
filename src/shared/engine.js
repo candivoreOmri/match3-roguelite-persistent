@@ -124,6 +124,11 @@ class Game {
   // Base: nothing happens — protected tiles just don't clear.
   onTileProtected(r, c, t, opts) {}
 
+  // Seam for variants: Chomper just landed on (r, c) — fires once per STEP
+  // (Double Bite fires it per bite), before any gravity can move him again.
+  // Base: no-op.
+  onChomperLand(r, c, t) {}
+
   // Seam for variants: called when a protected tile stops Chomper's step
   // (the blocker's cell + tile). Base: nothing happens — he just stays put.
   onChomperBlocked(r, c, t) {}
@@ -1034,11 +1039,12 @@ class Game {
           this.board[nr][nc] = s.t;
           this.backfillChomperTrail(pos.r, pos.c);
           pos = { r: nr, c: nc };
+          this.onChomperLand(nr, nc, s.t);
           continue;
         }
         if (prey) {
           // full per-piece value, same formula as the tile badges; Gourmet doubles it
-          const pts = (1 + (this.mods.boosts[prey.color] || 0)) * this.run.multiplier * (this.mods.gourmet ? 2 : 1);
+          const pts = (1 + (this.mods.boosts[prey.color] || 0)) * this.run.multiplier * (2 ** (this.mods.gourmet || 0)); // Gourmet doubles per stack
           this.score += pts;
           const bonus = (this.mods.boosts[prey.color] || 0) > 0 || this.run.multiplier > 1 || this.mods.gourmet;
           this.addFx(nr, nc, `+${pts}`, bonus ? 'gold' : '');
@@ -1047,6 +1053,7 @@ class Game {
         this.backfillChomperTrail(pos.r, pos.c);
         pos = { r: nr, c: nc };
         moved = true;
+        this.onChomperLand(nr, nc, s.t);
         if (steps > 1) { this.render(); await this.sleep(160); } // readable multi-step
       }
     }
