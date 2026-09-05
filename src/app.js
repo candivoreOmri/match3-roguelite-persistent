@@ -744,6 +744,9 @@ class PersistentGame extends Game {
   // gravity parked on a snack.
   async dropAndFill() {
     await super.dropAndFill();
+    // the engine clears fallDist without re-rendering; this render lets the
+    // board play the landing squash on tiles that just fell (kinetic pass)
+    this.render();
     if (!this.foodCells || !this.foodCells.size) return;
     for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
       const t = this.board[r][c];
@@ -753,6 +756,31 @@ class PersistentGame extends Game {
 
   async chomperStepAndEat() {
     await super.chomperMove();
+  }
+
+  // Juice pass (ref video 2026-09-05): matches burst into a golden-sparkle
+  // starburst — more particles, mixed star/dot glyphs, varied sizes, spin,
+  // longer drift — instead of six small dots. Cosmetic Math.random only.
+  addParticles(r, c, colorIdx) {
+    const n = 11 + Math.floor(Math.random() * 5);
+    const ids = [];
+    for (let i = 0; i < n; i++) {
+      const id = this.fxId++;
+      ids.push(id);
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 52;
+      this.fx.push({ id, r, c, kind: 'part', color: colorIdx,
+                     dx: Math.cos(ang) * dist, dy: Math.sin(ang) * dist - 8,
+                     size: 5 + Math.random() * 9,
+                     star: Math.random() < 0.45,
+                     spin: (Math.random() - 0.5) * 240,
+                     dur: 480 + Math.random() * 280 });
+    }
+    // bright core flash at the burst centre
+    const coreId = this.fxId++;
+    ids.push(coreId);
+    this.fx.push({ id: coreId, r, c, kind: 'flash' });
+    setTimeout(() => { this.fx = this.fx.filter(f => !ids.includes(f.id)); this.render(); }, 800);
   }
 
   continueRun() {
@@ -792,7 +820,10 @@ class PersistentGame extends Game {
       this.logLevel('clear');
       this.run.pendingDrafts++;
       this.tempoUsed = false; // Tempo re-arms for the new segment
-      if (this.run.checkpointIdx >= cps.length) this.run.finalReached = true;
+      if (this.run.checkpointIdx >= cps.length) {
+        this.run.finalReached = true;
+        this.callout('🔥 ENDLESS CHASE!', 'banner');
+      }
     }
     if (crossed) {
       this.lastCheckpoint = { n: this.run.checkpointIdx, crossed, moves: granted,
@@ -1018,7 +1049,7 @@ class PersistentGame extends Game {
       try { await this.explodeSeeds(seeds); } finally { this.mods.blastBonus -= n; }
     };
     if (pair === 'lightning+lightning') {
-      this.callout('🌩️ NOVA!');
+      this.callout('🌩️ NOVA!', 'banner');
       this.doShake(14);
       this.addWave(b.r, b.c, Math.max(this.rows, this.cols), 0);
       const cells = [];
@@ -1036,7 +1067,7 @@ class PersistentGame extends Game {
       }
       return;
     }
-    if (pair === 'bomb+bomb') { this.callout('💥 MEGA BOMB!'); await boost(2, [b]); return; }
+    if (pair === 'bomb+bomb') { this.callout('💥 MEGA BOMB!', 'banner'); await boost(2, [b]); return; }
     if (pair === 'bomb+lightning') { this.callout('⚡ Charged blast!'); await boost(1, [a, b]); return; }
     if (pair === 'arrow+bomb' || pair === 'arrow+lightning') {
       const arrow = ta.special === 'arrow' ? ta : tb;
@@ -1410,6 +1441,13 @@ function DraftCard({ G, o, i }) {
   </button>`;
 }
 
+// Kinetic fall pass (ref video 2026-09-05): tiles hesitate a beat, then
+// ACCELERATE down (gravity ease-in) with a slight in-flight stretch, and
+// squash-bounce on landing. The engine deletes fallDist when a drop settles;
+// this map remembers which tiles just fell so the settle render plays the
+// landing squash, then a timeout clears it. Cosmetic only.
+const FALLING = new Map(); // tile id -> 'air' | 'thud'
+
 function Board({ G }) {
   const cell = useCellSize(G.cols, G.rows);
   const [sel, setSel] = React.useState(null);
@@ -1475,8 +1513,24 @@ function Board({ G }) {
     const isSel = sel && sel.r === r && sel.c === c;
     const isVol = (t.volatile || 0) > (G.moveNum || 0);
     const tileStyle = { transform: `translate(${c * cell}px,${y}px)`, width: cell + 'px', height: cell + 'px' };
-    // falling tiles: duration scales with drop distance, spring easing lands with a bounce
-    if (t.fallDist) tileStyle.transition = `transform ${G.fallDur(t.fallDist)}ms cubic-bezier(.22,.9,.28,1.4)`;
+    // falling tiles: a 40ms hesitation beat, then gravity ACCELERATION —
+    // the bounce lives in the landing squash on the inner tin (below)
+    let kinetic = '';
+    const tinStyle = {};
+    if (t.enter !== undefined && t.enter < 0) tileStyle.opacity = 0; // refills spawn above the (unclipped) board — hidden until the fall starts
+    if (t.fallDist) {
+      const fd = Math.max(80, G.fallDur(t.fallDist) - 40);
+      tileStyle.transition = `transform ${fd}ms cubic-bezier(.5,.05,.75,.6) 40ms, opacity ${Math.round(fd * 0.35)}ms ease-out 40ms`;
+      FALLING.set(t.id, 'air');
+      kinetic = ' falling';
+      tinStyle['--fstretch'] = 1 + Math.min(6, t.fallDist) * 0.02;
+    } else if (FALLING.get(t.id) === 'air') {
+      FALLING.set(t.id, 'thud');
+      kinetic = ' thud';
+      setTimeout(() => { FALLING.delete(t.id); G.render(); }, 260);
+    } else if (FALLING.get(t.id) === 'thud') {
+      kinetic = ' thud'; // keep the class stable until the cleanup render
+    }
     // slot art per tile kind (CD, 2026-08-31): the coloured piece art is the
     // BASE even for specials — the special asset is a transparent glyph
     // painted over it. Art renders as-is; missing slots keep emoji/CSS.
@@ -1495,8 +1549,8 @@ function Board({ G }) {
     // LOWER rows draw over upper ones (z rises with row; CD fix 2026-08-31)
     tileStyle.zIndex = r + 1 + (isSel ? 11 : 0); /* stays under fx/callouts */
     tiles.push(h`<div key=${t.id} className="tile" style=${tileStyle}>
-      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : t.blocker ? 'blocker ' + t.blocker + (t.blocker === 'box' ? ' hits' + Math.max(1, t.hits) : '') + (t.ripple ? ' ripple' : '') : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '')}
-        style=${t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null}>
+      <div className=${'tin ' + (t.chomper ? 'chomper' : t.chest ? 'chest' : t.blocker ? 'blocker ' + t.blocker + (t.blocker === 'box' ? ' hits' + Math.max(1, t.hits) : '') + (t.ripple ? ' ripple' : '') : 'bg' + t.color) + (art ? ' skinned' : '') + (t.pop ? ' pop ' + (t.popKind || 'match') : '') + (isSel ? ' sel' : '') + (t.special ? ' sp' : '') + (t.fresh ? ' fresh' : '') + (isVol ? ' vol' : '') + (t.wiggle ? ' wiggle' : '') + (t.cflash ? ' cflash' : '') + (t.chomp ? ' chomping' : '') + kinetic}
+        style=${{ ...tinStyle, ...(t.pop && t.popDelay ? { animationDelay: t.popDelay + 'ms' } : null) }}>
         ${art}
         ${spArt}
         ${!art && t.chomper ? h`<span className="spe">😬</span>` : null}
@@ -1542,8 +1596,17 @@ function Board({ G }) {
   }
   for (const f of G.fx) {
     if (f.kind === 'part') {
-      fx.push(h`<div key=${'f' + f.id} className=${'particle bg' + f.color}
-        style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.5) * cell + 'px', '--dx': f.dx + 'px', '--dy': f.dy + 'px' }}></div>`);
+      const sz = f.size || 8;
+      fx.push(h`<div key=${'f' + f.id} className=${'particle bg' + f.color + (f.star ? ' star' : '')}
+        style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.5) * cell + 'px',
+                  '--dx': f.dx + 'px', '--dy': f.dy + 'px', '--spin': (f.spin || 0) + 'deg',
+                  width: sz + 'px', height: sz + 'px', fontSize: sz + 4 + 'px',
+                  animationDuration: (f.dur || 500) + 'ms' }}>${f.star ? '✦' : ''}</div>`);
+      continue;
+    }
+    if (f.kind === 'flash') {
+      fx.push(h`<div key=${'f' + f.id} className="burst-flash"
+        style=${{ left: (f.c + 0.5) * cell + 'px', top: (f.r + 0.5) * cell + 'px' }}></div>`);
       continue;
     }
     if (f.kind === 'wave') {
@@ -1637,6 +1700,7 @@ function LevelScreen({ G }) {
   // progress within the CURRENT goal only and resets when it's cleared.
   const prev = idx > 0 ? cps[idx - 1] : 0;
   const pct = next !== null ? Math.max(0, Math.min(100, ((G.score - prev) / (next - prev)) * 100)) : 100;
+  const frac = pct / 100; // 0..1 within the current goal — drives the near-goal glow
   const cp = G.lastCheckpoint;
   return h`<div className="screen level-screen">
     <div className="board-stack">
@@ -1648,9 +1712,9 @@ function LevelScreen({ G }) {
         </div>
         <div className="hud-goal">
           <div className="goal-row">${cps.map((v, i) => h`<span key=${i} title=${v}
-            className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
+            className=${'goal-ic' + (i < idx ? ' done' : i === idx ? ' cur' + (frac >= 0.75 ? ' near' : '') : '')}>${i < idx ? '✓' : i + 1}</span>`)}</div>
           <div className="bar goalbar">
-            <div className="fill" style=${{ width: pct + '%' }}></div>
+            <div className=${'fill' + (frac >= 0.75 ? ' hot' : '')} style=${{ width: pct + '%' }}></div>
             <div className="bar-label">${next !== null
               ? `${Math.max(0, G.score - prev)} / ${next - prev}`
               : h`${G.score} <span className="endless">ENDLESS 🔥</span>`}${G.run.multiplier > 1 ? h`<span className="mult"> ×${G.run.multiplier}</span>` : null}</div>

@@ -716,3 +716,71 @@ button.primary {
   position: absolute; bottom: 8px; right: 12px;
   font-size: 11px; color: #b9aef0; opacity: .8;
 }
+
+/* ---- juice pass 2026-09-05 (ref video): starbursts, banners, hot bar ---- */
+/* particles: sized dots + spinning star glyphs with glow, slight upward drift */
+.particle.star {
+  background: none !important; box-shadow: none; border-radius: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #ffe9a8; text-shadow: 0 0 6px #ffd54a, 0 0 14px rgba(255, 200, 80, .8);
+  animation: starFly var(--dur, .55s) ease-out forwards;
+}
+@keyframes starFly {
+  20% { opacity: 1; }
+  to { transform: translate(var(--dx), calc(var(--dy) + 14px)) rotate(var(--spin)) scale(.2); opacity: 0; }
+}
+@keyframes partFly {
+  to { transform: translate(var(--dx), calc(var(--dy) + 12px)) scale(.2); opacity: 0; }
+}
+.burst-flash {
+  position: absolute; z-index: 7; pointer-events: none;
+  width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,245,200,.95), rgba(255,210,110,.55) 45%, transparent 70%);
+  animation: burstFlash .32s ease-out forwards;
+}
+@keyframes burstFlash {
+  0% { transform: scale(.3); opacity: 1; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+/* event banner: full-width sweeping band with display type — owns the moment */
+.callout.banner {
+  width: min(92vw, 560px); text-align: center;
+  font-family: var(--font-display, inherit); font-size: 30px; font-weight: 400;
+  letter-spacing: .02em; color: #fff;
+  background: linear-gradient(90deg, transparent, rgba(124, 58, 237, .92) 18%, rgba(168, 60, 220, .92) 82%, transparent);
+  border: none; border-radius: 0; padding: 14px 0;
+  text-shadow: 0 2px 0 rgba(0,0,0,.5), 0 0 18px rgba(255, 213, 74, .55);
+  animation: bannerSweep 1.5s ease-out forwards;
+}
+@keyframes bannerSweep {
+  0% { opacity: 0; transform: translateX(-40px) scaleX(.6); }
+  14% { opacity: 1; transform: translateX(0) scaleX(1.03); }
+  22% { transform: scaleX(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(30px); }
+}
+/* goal bar: glowing head when the next goal is close; next pip gets eager */
+.goalbar .fill { position: relative; }
+.goalbar .fill.hot { box-shadow: 0 0 10px rgba(255, 160, 240, .8); }
+.goalbar .fill.hot::after {
+  content: ''; position: absolute; right: -3px; top: 50%; width: 10px; height: 10px;
+  margin-top: -5px; border-radius: 50%;
+  background: radial-gradient(circle, #fff, #ff9df0 60%, transparent);
+  animation: barHead 1s ease-in-out infinite;
+}
+@keyframes barHead { 50% { transform: scale(1.6); opacity: .7; } }
+.goal-ic.cur.near { animation: pipEager .8s ease-in-out infinite; box-shadow: 0 0 10px rgba(255, 213, 74, .8); }
+@keyframes pipEager { 50% { transform: scale(1.18); } }
+
+/* ---- kinetic falls 2026-09-05 (ref video): stretch in flight, squash on land ---- */
+.tin.falling {
+  transform: scaleY(var(--fstretch, 1.06)) scaleX(calc(2 - var(--fstretch, 1.06)));
+  transition: transform 120ms ease-in;
+  transform-origin: 50% 100%;
+}
+.tin.thud:not(.pop) { animation: landSquash 240ms cubic-bezier(.3, .8, .4, 1.2); transform-origin: 50% 100%; }
+@keyframes landSquash {
+  0%   { transform: scaleY(.72) scaleX(1.22); }
+  55%  { transform: scaleY(1.1) scaleX(.94); }
+  100% { transform: scaleY(1) scaleX(1); }
+}
