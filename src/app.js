@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 22, // v22: Gourmet stacks + covers snacks; food eaten at LANDING (fixes pass-through/gravity misses; Double Bite eats every stop)
+  BALANCE_VERSION: 23, // v23: gravity landings eat snacks too — food sweep after every drop (tester repro: he FELL onto the snack)
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -718,14 +718,13 @@ class PersistentGame extends Game {
     await this.chomperStepAndEat();
   }
 
-  // v22: food is eaten the moment he LANDS on the cell — per step, before
-  // gravity can move him. Fixes the misses: Double Bite passing THROUGH a
-  // snack on its first bite, and detonation craters dropping him off the
-  // cell before the old end-of-move scan ran. Gourmet doubles snacks too.
-  onChomperLand(r, c, t) {
-    super.onChomperLand(r, c, t);
+  // v22/v23: a snack is eaten on ANY arrival — his own step (onChomperLand,
+  // per bite, before gravity) or a GRAVITY landing (the sweep below runs
+  // after every drop; v23 tester repro: he FELL onto the snack and it never
+  // counted). Eating deletes the cell first, so no path can double-pay.
+  eatFoodAt(r, c) {
     const k = K(r, c);
-    if (!this.foodCells.has(k)) return;
+    if (!this.foodCells.has(k)) return false;
     this.foodCells.delete(k);
     const pts = CONFIG.CHOMPER_FOOD_BONUS * (2 ** (this.mods.gourmet || 0));
     this.score += pts;
@@ -733,6 +732,23 @@ class PersistentGame extends Game {
     this.addFx(r, c, `🍖 +${pts}`, 'gold big');
     this.callout('😬 nom!');
     this.topUpFood();
+    return true;
+  }
+
+  onChomperLand(r, c, t) {
+    super.onChomperLand(r, c, t);
+    this.eatFoodAt(r, c);
+  }
+
+  // Every board settle ends in dropAndFill — sweep for chompers that
+  // gravity parked on a snack.
+  async dropAndFill() {
+    await super.dropAndFill();
+    if (!this.foodCells || !this.foodCells.size) return;
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+      const t = this.board[r][c];
+      if (t && t.chomper) this.eatFoodAt(r, c);
+    }
   }
 
   async chomperStepAndEat() {
