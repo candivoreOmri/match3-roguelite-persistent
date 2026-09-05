@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 21, // v21: merge combos (mega bomb/crosses/NOVA), line clears damage blockers, carry-over messaging
+  BALANCE_VERSION: 22, // v22: Gourmet stacks + covers snacks; food eaten at LANDING (fixes pass-through/gravity misses; Double Bite eats every stop)
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -351,6 +351,13 @@ POWERUPS.snowpaint = {
 };
 POWERUP_LIST.push(POWERUPS.snowcrush, POWERUPS.snowpaint); // shared list is built at load time
 
+// v22 Gourmet: stackable — each pick doubles Chomper's meal value again
+// (2^stacks), snacks included (applied at the food landing hook below).
+Object.assign(POWERUPS.gourmet, {
+  stackable: true,
+  mods(m) { m.gourmet = (m.gourmet || 0) + 1; },
+});
+
 // v9 chomper desc mentions his snacks (mechanics in PersistentGame below —
 // movement steering stays SECRET, never hint at it).
 POWERUPS.chomper.desc = () => `A hungry critter roams the board — after each move you make it eats one piece at full value (specials detonate; 🍖 snacks pay +${CONFIG.CHOMPER_FOOD_BONUS})`;
@@ -452,7 +459,7 @@ const CARD_COPY = {
   chomper:     () => 'A hungry critter eats one piece after each move — 🍖 snacks pay +20, specials go boom',
   twinchomper: () => 'A second Chomper joins the board',
   doublebite:  () => 'Chomper takes an extra bite each move (stacks)',
-  gourmet:     () => 'Pieces Chomper eats score double',
+  gourmet:     () => 'Everything Chomper eats scores double — snacks too (stacks)',
   spicytrail:  () => 'Chomper\'s trail stays scorched — match it for bonus blasts',
   bombtrail:   () => 'Chomper leaves live bombs behind him',
   buffet:      () => '2 more 🍖 snacks on the board (stacks)',
@@ -711,26 +718,25 @@ class PersistentGame extends Game {
     await this.chomperStepAndEat();
   }
 
-  // Eat on arrival: after his step, any Chomper standing on a food cell
-  // consumes it (cell marks never move, so position is the identity); the
-  // table is restocked the same move — CHOMPER_FOOD_COUNT (+Buffet) always.
+  // v22: food is eaten the moment he LANDS on the cell — per step, before
+  // gravity can move him. Fixes the misses: Double Bite passing THROUGH a
+  // snack on its first bite, and detonation craters dropping him off the
+  // cell before the old end-of-move scan ran. Gourmet doubles snacks too.
+  onChomperLand(r, c, t) {
+    super.onChomperLand(r, c, t);
+    const k = K(r, c);
+    if (!this.foodCells.has(k)) return;
+    this.foodCells.delete(k);
+    const pts = CONFIG.CHOMPER_FOOD_BONUS * (2 ** (this.mods.gourmet || 0));
+    this.score += pts;
+    this.segFood = (this.segFood || 0) + 1;
+    this.addFx(r, c, `🍖 +${pts}`, 'gold big');
+    this.callout('😬 nom!');
+    this.topUpFood();
+  }
+
   async chomperStepAndEat() {
     await super.chomperMove();
-    if (!this.foodCells.size) return;
-    let ate = false;
-    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
-      const t = this.board[r][c];
-      if (!t || !t.chomper) continue;
-      const k = K(r, c);
-      if (!this.foodCells.has(k)) continue;
-      this.foodCells.delete(k);
-      this.score += CONFIG.CHOMPER_FOOD_BONUS;
-      this.segFood = (this.segFood || 0) + 1;
-      this.addFx(r, c, `🍖 +${CONFIG.CHOMPER_FOOD_BONUS}`, 'big');
-      this.callout('😬 nom!');
-      ate = true;
-    }
-    if (ate) { this.topUpFood(); this.render(); }
   }
 
   continueRun() {
