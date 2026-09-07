@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 24, // v24: Special forge (per-colour: matching it spawns a random special) + goal-bar heat rework
+  BALANCE_VERSION: 25, // v25: forge fix — 4+/shape/square matches keep their natural special only (no double spawn)
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
