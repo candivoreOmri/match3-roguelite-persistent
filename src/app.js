@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 23, // v23: gravity landings eat snacks too — food sweep after every drop (tester repro: he FELL onto the snack)
+  BALANCE_VERSION: 24, // v24: Special forge (per-colour: matching it spawns a random special) + goal-bar heat rework
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —

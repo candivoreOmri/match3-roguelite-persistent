@@ -42,6 +42,19 @@ const POWERUPS = {
       if (g.mods.boosts[group.color] && g.rng() < CONFIG.SPECIAL_SPAWNER_CHANCE) api.spawnRandomSpecial(group);
     },
   },
+  forge: {
+    id: 'forge', name: 'Special forge', icon: '⚒️', cluster: 'colour', stackable: true,
+    // per-colour like boost, but a duplicate colour would be worthless: roll
+    // only unowned colours, and leave the pool once every colour is forged
+    avail(g) { return g.run.picks.filter(p => p.id === 'forge').length < g.opts.colours; },
+    roll(g) {
+      const owned = new Set(g.run.picks.filter(p => p.id === 'forge').map(p => p.color));
+      const free = [...Array(g.opts.colours).keys()].filter(c => !owned.has(c));
+      return { color: free[Math.floor(g.rng() * free.length)] };
+    },
+    desc: p => `Matching ${COLOR_NAMES[p.color]} creates a random special piece`,
+    onMatch(g, p, group, api) { if (group.color === p.color) api.spawnRandomSpecial(group); },
+  },
   fillup: {
     id: 'fillup', name: 'Fill-up', icon: '🔋', cluster: 'colour', stackable: false, requiresBoost: true,
     desc: () => `Every ${CONFIG.FILL_UP_THRESHOLD} boosted tiles matched: run multiplier +1`,
@@ -325,7 +338,7 @@ const POWERUP_TIERS = {
   tempo: 1, snowball: 1, pinata: 1, diagswap: 1, fusionmove: 1, momentum: 1,
   squarescore: 1, squarebomb: 2,
   gourmet: 1, twinchomper: 2, doublebite: 2, spicytrail: 2, bombtrail: 2,
-  spawner: 2, bombchance: 2, autoexplode: 2, rowclear: 2, colclear: 2, flood: 2,
+  spawner: 2, forge: 2, bombchance: 2, autoexplode: 2, rowclear: 2, colclear: 2, flood: 2,
   converter: 2, spawnweight: 2, matryoshka: 2, aftershock: 2, chests: 2, tripletile: 2, purge: 2,
   conveyor: 2, chomper: 1,
   sweep: 3, // legendary — tester data: cascade-scale colour wipes on demand
