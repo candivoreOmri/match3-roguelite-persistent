@@ -53,7 +53,9 @@ const POWERUPS = {
       return { color: free[Math.floor(g.rng() * free.length)] };
     },
     desc: p => `Matching ${COLOR_NAMES[p.color]} creates a random special piece`,
-    onMatch(g, p, group, api) { if (group.color === p.color) api.spawnRandomSpecial(group); },
+    // 4+/shape/square matches already spawn their natural special — forge only
+    // tops up plain 3-matches, never doubling up (Omri, 2026-09-07)
+    onMatch(g, p, group, api) { if (group.color === p.color && !g.groupSpawnType(group)) api.spawnRandomSpecial(group); },
   },
   fillup: {
     id: 'fillup', name: 'Fill-up', icon: '🔋', cluster: 'colour', stackable: false, requiresBoost: true,
