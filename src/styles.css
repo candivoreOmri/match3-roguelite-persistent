@@ -759,16 +759,18 @@ button.primary {
   78% { opacity: 1; }
   100% { opacity: 0; transform: translateX(30px); }
 }
-/* goal bar: glowing head when the next goal is close; next pip gets eager */
+/* goal bar near-goal heat (reworked 2026-09-06 — the old glowing-head dot
+   fought the shine sweep for ::after and got clipped by overflow:hidden):
+   the fill's leading edge warms to gold, the whole bar breathes a soft warm
+   glow, and the existing shine just sweeps faster. No extra elements. */
 .goalbar .fill { position: relative; }
-.goalbar .fill.hot { box-shadow: 0 0 10px rgba(255, 160, 240, .8); }
-.goalbar .fill.hot::after {
-  content: ''; position: absolute; right: -3px; top: 50%; width: 10px; height: 10px;
-  margin-top: -5px; border-radius: 50%;
-  background: radial-gradient(circle, #fff, #ff9df0 60%, transparent);
-  animation: barHead 1s ease-in-out infinite;
+.goalbar .fill.hot {
+  background: linear-gradient(90deg, #8b5cf6, #ff7ad9 55%, #ffd54a);
+  box-shadow: 0 0 12px rgba(255, 205, 110, .5);
+  animation: hotBreathe 1.6s ease-in-out infinite;
 }
-@keyframes barHead { 50% { transform: scale(1.6); opacity: .7; } }
+.goalbar .fill.hot::after { animation-duration: 1.2s; } /* shine sweeps faster */
+@keyframes hotBreathe { 50% { box-shadow: 0 0 4px rgba(255, 205, 110, .25); } }
 .goal-ic.cur.near { animation: pipEager .8s ease-in-out infinite; box-shadow: 0 0 10px rgba(255, 213, 74, .8); }
 @keyframes pipEager { 50% { transform: scale(1.18); } }
 

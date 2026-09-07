@@ -190,6 +190,7 @@ class Game {
       (!d.requiresChomper || this.mods.chomper);
     const available = d =>
       !d.disabled && gateOk(d) &&
+      (!d.avail || d.avail(this)) && // per-def availability (e.g. forge: all colours owned)
       (d.stackable || !this.run.picks.some(p => p.id === d.id));
     // legendaries live outside the normal pool (see legendary slot below)
     const pool = POWERUP_LIST.filter(d =>
