@@ -15,7 +15,7 @@
 const CONFIG = {
   // Stamped into every telemetry record so balance passes only compare runs
   // played on the same rules. Bump when mechanics or targets change.
-  BALANCE_VERSION: 25, // v25: forge fix — 4+/shape/square matches keep their natural special only (no double spawn)
+  BALANCE_VERSION: 26, // v26: water rework — one-time 3-seed intro (no refill respawns), matches remove single tiles, spread is per-puddle
 
   // Blockers: inert tiles cleared only through their own interaction (see
   // the BLOCKERS registry below CONFIG). Each type enters the REFILL pool —
@@ -24,7 +24,7 @@ const CONFIG = {
   // refill tile; caps bound how many of a type exist at once (drip-style —
   // without them a 15% per-tile chance floods a persistent board).
   BLOCKER_STATIC_BOX_CHANCE: 0.15,
-  BLOCKER_WATER_CHANCE: 0.08,
+  BLOCKER_WATER_SEED_COUNT: 3,       // one-time seeding at the intro checkpoint, placed far apart
   BLOCKER_COLOR_SAFE_CHANCE: 0.05,
   BLOCKER_INTRO_CHECKPOINT_BOX: 3,
   BLOCKER_INTRO_CHECKPOINT_WATER: 5,
@@ -32,7 +32,7 @@ const CONFIG = {
   BLOCKER_STATIC_BOX_HITS: 3,
   BLOCKER_WATER_SPREAD_INTERVAL: 1,  // water spreads every Nth player move
   BLOCKER_COLOR_SAFE_COLORS_REQUIRED: 4, // of 5 (all of them when fewer colours are active)
-  BLOCKER_CAPS: { box: 3, water: 2, safe: 1 }, // concurrent per type (water cap = seeds; spread is unbounded)
+  BLOCKER_CAPS: { box: 3, safe: 1 }, // concurrent per type (water doesn't refill-spawn — it seeds once, see BLOCKER_WATER_SEED_COUNT)
   BLOCKER_WATER_BONUS_SPECIALS: 2,   // specials awarded for clearing ALL water in one move
 
   // Chomper food: cell-layer snacks only Chomper can consume, paying
@@ -206,8 +206,7 @@ const BLOCKERS = {
   },
   water: {
     intro:  () => CONFIG.BLOCKER_INTRO_CHECKPOINT_WATER,
-    chance: () => CONFIG.BLOCKER_WATER_CHANCE,
-    cap:    () => CONFIG.BLOCKER_CAPS.water,
+    seeded: true, // never rolls on refills — a one-time seeding event at the intro checkpoint (v26)
     make:   () => ({}),
   },
   safe: {
@@ -797,8 +796,16 @@ class PersistentGame extends Game {
     if (this.phase === 'level') {
       // all the move's water removals are done — bonus if the board is dry now
       if (hadWater && this.waterClearedThisMove && this.waterCount() === 0) this.waterAllClearBonus();
-      // spread AFTER the move and its cascades fully resolve
-      if (this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
+      // water's one-time intro: seed a few tiles far apart (v26, no refill respawns)
+      let justSeeded = false;
+      if (!this.run.waterSeeded && this.opts.blockers.water && this.run.checkpointIdx >= BLOCKERS.water.intro()) {
+        this.run.waterSeeded = true;
+        justSeeded = true;
+        this.seedWater();
+      }
+      // spread AFTER the move and its cascades fully resolve — but never on
+      // the seeding move itself (the player gets one clean look at the seeds)
+      if (!justSeeded && this.moveNum % Math.max(1, CONFIG.BLOCKER_WATER_SPREAD_INTERVAL) === 0) this.waterSpread();
       this.dripRolls();
       this.topUpFood(); // the table never runs low (no-op without Chomper)
       if (this.movesLeft <= 3) this.segDanger++; // moves played under the gun (cap-tuning telemetry)
@@ -938,6 +945,7 @@ class PersistentGame extends Game {
 
   rollBlockerTile() {
     for (const [type, def] of Object.entries(BLOCKERS)) {
+      if (def.seeded) continue; // event-seeded types (water) never enter the refill pool
       if (!this.opts.blockers || !this.opts.blockers[type]) continue; // pre-run toggle (default off)
       if (this.run.checkpointIdx < def.intro()) continue; // chance is 0 before the intro checkpoint
       if (this.blockerCount(type) >= def.cap()) continue;
@@ -970,7 +978,7 @@ class PersistentGame extends Game {
     if (!this._blockerHitStep) this._blockerHitStep = new Set();
     if (this._blockerHitStep.has(t.id)) return;
     this._blockerHitStep.add(t.id);
-    if (t.blocker === 'water') { this.removeWaterChain(r, c); return; }
+    if (t.blocker === 'water') { this.removeWaterAt(r, c); return; }
     if (t.blocker === 'box') { this.damageBox(r, c, t); return; }
     if (t.blocker === 'safe') {
       let color = -1;
@@ -1005,11 +1013,12 @@ class PersistentGame extends Game {
     for (const g of groups) {
       const hitOnce = new Set(); // one box hit / safe light per group
       for (const { r, c, t } of this.blockerNeighbors(g)) {
-        if (t.blocker === 'water') { // any match frees water, cascades included
-          this.removeWaterChain(r, c);
+        if (t.blocker === 'water') { // any adjacent match chips ONE water tile, cascades included
+          this.removeWaterAt(r, c);
           continue;
         }
-        if (!g.active || hitOnce.has(t.id)) continue; // boxes/safes: player matches only
+        if (hitOnce.has(t.id)) continue;
+        if (!g.active && t.blocker !== 'box') continue; // safes: player matches only — boxes count cascades too (v26, Omri)
         hitOnce.add(t.id);
         if (t.blocker === 'box') this.damageBox(r, c, t);
         else if (t.blocker === 'safe') this.lightSafe(r, c, t, g.color);
@@ -1024,7 +1033,7 @@ class PersistentGame extends Game {
   onChomperBlocked(r, c, t) {
     if (!t.blocker) return;
     this.doShake(3);
-    if (t.blocker === 'water') this.removeWaterChain(r, c);
+    if (t.blocker === 'water') this.removeWaterAt(r, c);
     else if (t.blocker === 'box') this.damageBox(r, c, t);
     else if (t.blocker === 'safe') {
       const unlit = [];
@@ -1108,39 +1117,82 @@ class PersistentGame extends Game {
     }
   }
 
-  // Water removal chain-clears the orthogonally connected puddle. 0 points.
-  // Emptying the board of water in one move pays 2 random special pieces.
-  removeWaterChain(r, c) {
-    const stack = [[r, c]];
-    while (stack.length) {
-      const [rr, cc] = stack.pop();
-      const t = this.board[rr] && this.board[rr][cc];
-      if (!t || t.blocker !== 'water') continue;
-      this.board[rr][cc] = this.makeTile(this.rollRefillColor());
-      this.board[rr][cc].fresh = true;
-      this.segBlockers.water++;
-      this.addFx(rr, cc, '💧', 'emoji');
-      for (const [dr, dc] of DIRS4) stack.push([rr + dr, cc + dc]);
-    }
+  // Water removal takes ONE tile — a match beside a puddle chips it down,
+  // never wipes it (v26, Omri). 0 points. Emptying the board of water in
+  // one move still pays the bonus specials.
+  removeWaterAt(r, c) {
+    const t = this.board[r] && this.board[r][c];
+    if (!t || t.blocker !== 'water') return;
+    this.board[r][c] = this.makeTile(this.rollRefillColor());
+    this.board[r][c].fresh = true;
+    this.segBlockers.water++;
+    this.addFx(r, c, '💧', 'emoji');
     this.waterClearedThisMove = true;
+  }
+
+  // One-time intro (v26): place the seeds greedily maximising the minimum
+  // pairwise Manhattan distance, so the puddles start far apart.
+  seedWater() {
+    const valid = [];
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+      const k = K(r, c);
+      if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) continue;
+      const t = this.board[r][c];
+      if (!t || t.special || this.protectedTile(t)) continue;
+      valid.push({ r, c });
+    }
+    if (!valid.length) return;
+    const picked = [valid[Math.floor(this.rng() * valid.length)]];
+    while (picked.length < Math.min(CONFIG.BLOCKER_WATER_SEED_COUNT, valid.length)) {
+      let best = null, bestD = -1;
+      for (const cand of valid) {
+        const d = Math.min(...picked.map(q => Math.abs(q.r - cand.r) + Math.abs(q.c - cand.c)));
+        if (d > bestD) { bestD = d; best = cand; }
+      }
+      if (!best || bestD === 0) break;
+      picked.push(best);
+    }
+    for (const q of picked) {
+      const nw = { id: this.tileId++, color: -4, blocker: 'water', special: null, dir: null, countdown: null, fresh: true, ripple: true };
+      this.board[q.r][q.c] = nw;
+      setTimeout(() => { delete nw.ripple; this.render(); }, 700);
+    }
+    this.callout('💧 Water is seeping in!');
+    this.doShake(4);
+    this.render();
   }
 
   waterCount() { return this.blockerCount('water'); }
 
-  // Spread: after the move fully resolves (cascades included) each water
-  // tile claims one random valid orthogonal neighbour — never specials,
+  // Spread: after the move fully resolves (cascades included) each connected
+  // PUDDLE claims one random valid orthogonal neighbour — never specials,
   // chests, Chomper, other blockers, or cells carrying food/marks/piñatas/
-  // triples. A puddle with nowhere to go sits still that move.
+  // triples. Per-puddle (v26): with single-tile removal, the old per-TILE
+  // spread grows faster than any player can chip it down. A puddle with
+  // nowhere to go sits still that move.
   waterSpread() {
-    const waters = [];
-    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++)
-      if (this.board[r][c] && this.board[r][c].blocker === 'water') waters.push({ r, c });
+    const seen = new Set(), puddles = [];
+    for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+      if (!this.board[r][c] || this.board[r][c].blocker !== 'water' || seen.has(K(r, c))) continue;
+      const cells = [], stack = [[r, c]];
+      while (stack.length) {
+        const [rr, cc] = stack.pop(), k = K(rr, cc);
+        if (seen.has(k)) continue;
+        const t = this.board[rr] && this.board[rr][cc];
+        if (!t || t.blocker !== 'water') continue;
+        seen.add(k); cells.push({ r: rr, c: cc });
+        for (const [dr, dc] of DIRS4) stack.push([rr + dr, cc + dc]);
+      }
+      puddles.push(cells);
+    }
     let spread = false;
-    for (const w of waters) {
+    for (const cells of puddles) {
       const cands = [];
-      for (const [dr, dc] of DIRS4) {
+      const seenC = new Set();
+      for (const w of cells) for (const [dr, dc] of DIRS4) {
         const r = w.r + dr, c = w.c + dc, k = K(r, c);
-        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols) continue;
+        if (r < 0 || r >= this.rows || c < 0 || c >= this.cols || seenC.has(k)) continue;
+        seenC.add(k);
         if (this.marks.has(k) || this.pinatas.has(k) || this.triples.has(k) || this.foodCells.has(k)) continue;
         const t = this.board[r][c];
         if (!t || t.special || this.protectedTile(t)) continue; // normal coloured tiles only

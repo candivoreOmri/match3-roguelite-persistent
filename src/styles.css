@@ -484,13 +484,34 @@ button.primary {
   70% { transform: scale(1.18) rotate(-7deg); }
   100% { transform: scale(1) rotate(0); }
 }
+/* scorched (volatile) tiles — v26 readability pass (Omri: 'very hard to
+   notice'). Three cues that survive the piece art: an ember wash over the
+   face, a flicking flame badge, and a hot pulsing rim. */
 .tin.vol { animation: volPulse .9s infinite; }
 @keyframes volPulse {
-  0%, 100% { box-shadow: inset 0 -3px 0 rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.18), 0 0 4px rgba(255,90,60,.5); }
-  50% { box-shadow: inset 0 -3px 0 rgba(0,0,0,.25), inset 0 2px 0 rgba(255,255,255,.18), 0 0 14px rgba(255,90,60,.95); }
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 100, 40, .55); }
+  50% { box-shadow: 0 0 16px rgba(255, 120, 40, .95), 0 0 4px rgba(255, 200, 90, .8); }
+}
+.tin.vol::before {
+  content: ''; position: absolute; inset: 0; border-radius: 9px; z-index: 2; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 85%, rgba(255, 130, 40, .55), rgba(255, 70, 20, .18) 55%, transparent 75%);
+  animation: volEmber .9s ease-in-out infinite alternate;
+}
+@keyframes volEmber { from { opacity: .55; } to { opacity: 1; } }
+.tin.vol::after {
+  content: '🔥'; position: absolute; top: -7px; left: -5px; font-size: 15px; z-index: 3;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .75));
+  animation: volFlame .7s ease-in-out infinite;
+}
+@keyframes volFlame {
+  0%, 100% { transform: scale(1) rotate(-6deg); }
+  50% { transform: scale(1.25) rotate(6deg); }
 }
 .spe { font-size: 60%; }
-.tin .spe { font-size: 1.15em; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+/* fallback glyphs must paint ABOVE the absolutely-positioned piece art —
+   without this, missing-slot specials (e.g. dynamite, no asset yet) render
+   an emoji that hides behind the sprite (v26 placeholder fix) */
+.tin .spe { font-size: 1.15em; text-shadow: 0 1px 3px rgba(0,0,0,.6); position: relative; z-index: 2; }
 .cd {
   position: absolute; top: -4px; right: -4px; background: var(--bg); color: var(--gold);
   border: 1.5px solid var(--gold); border-radius: 50%; width: 22px; height: 22px;
